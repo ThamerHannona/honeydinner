@@ -19,7 +19,11 @@
     },
     "android": {
       "edgeToEdgeEnabled": true,
-      "package": "com.shakeandbakelabs.honeydinner"
+      "package": "com.shakeandbakelabs.honeydinner",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -48,6 +52,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "606db703-82ec-4e7a-96cf-d0045dc84566"
+      }
+    },
+    "owner": "thamerhannonas-organization"
   }
 }
