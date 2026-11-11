@@ -1,0 +1,22 @@
+name: Ship to TestFlight
+
+# Run from GitHub: Actions tab → "Ship to TestFlight" → Run workflow.
+# Needs the repo secret EXPO_TOKEN (expo.dev → Account settings → Access tokens).
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-submit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: bun install
+      - run: eas build --platform ios --profile production --non-interactive --no-wait --auto-submit
