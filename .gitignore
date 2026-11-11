@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Secrets — never commit env files (backend/.env holds API keys)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Expo / build output
+.expo/
+dist/
+web-build/
+mobile/ios/
+mobile/android/
+*.tsbuildinfo
+
+# Credentials
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.jks
+*.pem
+
+# OS
+.DS_Store
