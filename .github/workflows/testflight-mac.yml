@@ -1,0 +1,37 @@
+name: Ship to TestFlight (free GitHub Mac build)
+
+# Builds the iOS app on GitHub's macOS runner (no EAS build credits used),
+# using signing credentials stored on EAS, then uploads to TestFlight via EAS Submit.
+# Needs the repo secret EXPO_TOKEN. Remember to bump ios.buildNumber in mobile/app.json first.
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-submit:
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: oven-sh/setup-bun@v2
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - run: bun install --frozen-lockfile || bun install
+      - name: Build IPA locally
+        run: npx eas-cli@latest build --local --platform ios --profile production --non-interactive --output ${{ github.workspace }}/app.ipa
+      - name: Submit to TestFlight
+        run: npx eas-cli@latest submit --platform ios --profile production --path ${{ github.workspace }}/app.ipa --non-interactive --wait
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-build
+          path: ${{ github.workspace }}/app.ipa
+          if-no-files-found: ignore
