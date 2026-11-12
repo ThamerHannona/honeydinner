@@ -4,6 +4,19 @@ A household dinner app for couples and families. It answers "what should we make
 
 **v1 runs entirely on mock data with simulated AI and scanning.** All data lives on the device (Zustand + AsyncStorage).
 
+## Recipe import (real extraction)
+The mobile app’s import flow calls a **Supabase Edge Function** to extract the *actual* recipe from a shared/pasted link (TikTok prioritized). It uses the TikTok caption and (best-effort) audio transcription, then structures the recipe with an LLM **without inventing**.
+
+- **Mobile (EAS env vars, required)**:
+  - `EXPO_PUBLIC_SUPABASE_URL`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- **Supabase Edge Function secrets (required)**:
+  - `OPENAI_API_KEY`
+- **Supabase Edge Function secrets (optional)**:
+  - `OPENAI_MODEL` (default `gpt-4o-mini`)
+  - `OPENAI_TRANSCRIBE_MODEL` (default `gpt-4o-mini-transcribe`)
+  - `MAX_TIKTOK_MEDIA_BYTES` (default `20000000`)
+
 ## Brand
 - Editorial kitchen / sticker-pop light theme: cream `#F4EDE0`, ink `#14110D`, green `#1DAF3A`, forest `#14702A`, honey `#F4AA22`, alert `#FF5A3C`.
 - Fonts: Fraunces 600 + real italic for headlines, Barlow Condensed 700/800 for uppercase labels and logo, Inter 400/500/600/700 for body and buttons.
@@ -56,7 +69,7 @@ The four tabs retain Tonight / Recipes / Kitchen / List navigation. Their shared
 ## Code map
 - `src/components/KitchenData.tsx`: shared data-screen layout, section headings, and recipe preview cards
 - `src/components/TabPlaceholder.tsx`: retained placeholder component (not used by the populated tabs)
-- `src/lib/services/kitchen-ai.ts`: **the one service file for all import/scan logic.** It has mock versions of `detectPlatform`, `fetchPostMetadata`, `extractFromCaption`, `transcribeVideoAudio`, `readOnScreenText`, `extractFromImage`, `structureRecipe`, `scanReceipt` and `scanFridge`, plus the `importRecipe` pipeline. Swap the mocks for real backend calls without touching the screens. Only the link, creator handle, thumbnail and structured recipe are stored, never the video.
+- `src/lib/services/kitchen-ai.ts`: **the one service file for all import/scan logic.** Recipe import calls the Supabase Edge Function `import-recipe` (caption + best-effort transcription → structured recipe). Scan flows (receipt/fridge) are still mocked.
 - `src/lib/store.ts`: app state (pantry, recipes, groceries, members, vote) plus toasts
 - `src/lib/kitchen.ts`: ingredient matching, expiry, aisles, emoji, quantity formatting, timer detection
 - `src/lib/pantry.ts`: shared location options, location/search filtering, local date input formatting and strict expiry-date parsing
@@ -78,4 +91,14 @@ The four tabs retain Tonight / Recipes / Kitchen / List navigation. Their shared
 - iOS builds go through Expo EAS (`mobile/eas.json`): `eas build -p ios --profile production`, then `eas submit -p ios`.
 - `backend/` is Vibecode's starter server (only a sample route). The app does not call it in v1.
 - **Never commit `.env` files.** `backend/.env` contains API keys; the root `.gitignore` excludes every `.env*` file.
-- Import/scan AI is still mocked in `mobile/src/lib/services/kitchen-ai.ts`. Making it real needs your own AI key on a server you control (e.g. a Supabase Edge Function), never inside the app.
+- Import is powered by the Supabase Edge Function in `supabase/functions/import-recipe/` (OpenAI key stays server-side). Scan AI is still mocked.
+
+## Supabase Edge Function deploy (importer)
+- **Link project**: `supabase link --project-ref <your-project-ref>`
+- **Set required secrets**:
+  - `supabase secrets set OPENAI_API_KEY=...`
+  - Optional: `supabase secrets set OPENAI_MODEL=gpt-4o-mini OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe MAX_TIKTOK_MEDIA_BYTES=20000000`
+- **Deploy**: `supabase functions deploy import-recipe`
+
+Test (after deploy) from your machine:
+- `SUPABASE_URL=... SUPABASE_ANON_KEY=... node scripts/test-import-edge.mjs`
