@@ -9,6 +9,7 @@
         "@bottom-tabs/react-navigation": "^0.12.2",
         "@codeherence/react-native-header": "^1.0.0",
         "@expo-google-fonts/barlow-condensed": "^0.4.1",
+        "@expo-google-fonts/caveat-brush": "^0.4.1",
         "@expo-google-fonts/fraunces": "^0.4.1",
         "@expo-google-fonts/inter": "^0.4.2",
         "@expo-google-fonts/nunito": "^0.4.2",
@@ -425,6 +426,8 @@
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.3.5", "", { "dependencies": { "@eslint/core": "^0.15.2", "levn": "^0.4.1" } }, "sha512-Z5kJ+wU3oA7MMIqVR9tyZRtjYPr4OC004Q4Rw7pgOKUOKkJfZ3O24nz3WYfGRpMDNmcOi3TwQOmgm7B7Tpii0w=="],
 
     "@expo-google-fonts/barlow-condensed": ["@expo-google-fonts/barlow-condensed@0.4.1", "", {}, "sha512-9yuXU1MpI4Dw/8rR4pj2EXcT4/31H5+DrrT47auF8IzD9r7SZPRoNVq8clRq7zxOTh7v1gJk3pBhydDVf2x/dA=="],
+
+    "@expo-google-fonts/caveat-brush": ["@expo-google-fonts/caveat-brush@0.4.1", "", {}, "sha512-L7RoV5pMCEcUIdI5VBw0YBAI64kJUMATWNXo+JIdUVwVzznmZt1paQE/XzK18S3xMOd+ttmxZbPwvnHQKwQz+Q=="],
 
     "@expo-google-fonts/fraunces": ["@expo-google-fonts/fraunces@0.4.1", "", {}, "sha512-gYc9P92ObyWvz1rWPOeWSvVKyBFIuA8hgOdhvo4DSiPBaWLbFA6v8uLIEIBwW+0oWTlXbBzjeBReHQI2H7UNjQ=="],
 
