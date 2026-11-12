@@ -485,6 +485,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   try {
+    if (!Deno.env.get("OPENAI_API_KEY")) {
+      return json({ error: "Server is not configured for recipe import." }, { status: 500 });
+    }
+
     const body = await req.json().catch(() => null) as any;
     const rawUrl = typeof body?.url === "string" ? body.url : "";
     const url = normalizeUrl(rawUrl);
