@@ -43,7 +43,7 @@ export default function ImportLoading() {
     <View className="flex-1 bg-cream" testID="import-loading-screen">
       <SheetHeader fullScreen onClose={close} />
       <ScrollView testID="import-loading-content" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: 16, flexGrow: 1 }}>
-        <View className="mb-6 flex-row items-center self-center rounded-full bg-white px-3 py-2" style={{ gap: 7 }}><PlatformBadge platform={platform} size={20} /><Txt label weight="extrabold" className="text-[13px] uppercase tracking-wider">{PLATFORM_LABEL[platform]} · preview import</Txt></View>
+        <View className="mb-6 flex-row items-center self-center rounded-full bg-white px-3 py-2" style={{ gap: 7 }}><PlatformBadge platform={platform} size={20} /><Txt label weight="extrabold" className="text-[13px] uppercase tracking-wider">{PLATFORM_LABEL[platform]} · importing</Txt></View>
         <View testID="import-recipe-placeholder" accessibilityLabel="Preparing recipe photo and details" accessibilityState={{ busy: true }} style={{ padding: 12, borderRadius: 24, backgroundColor: C.paper, gap: 12 }}>
           <Skeleton testID="import-photo-skeleton" width="100%" height={132} borderRadius={16} />
           <Skeleton testID="import-title-skeleton" width="82%" height={22} borderRadius={6} />
@@ -52,7 +52,7 @@ export default function ImportLoading() {
         <View className="mt-5 items-center">
           <View testID="import-loading-title" accessible accessibilityLabel="Reading the recipe…" className="flex-row flex-wrap items-center justify-center"><Txt display weight="bold" className="text-center text-[31px] leading-[37px]">Reading the </Txt><Highlight style={{ fontSize: 31, lineHeight: 37 }}>recipe…</Highlight></View>
           <Txt className="mt-2 text-center text-[14px] text-ink-soft">A clean recipe, ready for your kitchen.</Txt>
-          <Txt testID="import-demo-notice" className="mt-2 text-center text-[11px] text-ink-soft">Demo mode · this import uses a sample recipe.</Txt>
+          <Txt testID="import-demo-notice" className="mt-2 text-center text-[11px] text-ink-soft">FridgeGenie is watching the video and writing it step by step.</Txt>
         </View>
         <View className="mt-6" testID="import-steps" accessibilityState={{ busy: !mutation.isSuccess }} accessibilityLiveRegion="polite" accessibilityLabel={mutation.isSuccess ? 'Recipe ready' : `Preparing recipe: ${IMPORT_STEPS[stepIdx]?.label ?? 'Reading recipe'}`}>
           {IMPORT_STEPS.map((s, i) => {

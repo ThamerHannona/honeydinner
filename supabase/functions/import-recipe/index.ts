@@ -1,17 +1,36 @@
+// import-recipe — turns a shared TikTok / Instagram / Facebook / web link into a
+// clean, step-by-step recipe for Honey, Dinner?
+//
+// How it reads a post (best effort, in order):
+//   1. Post details: caption, creator, cover image, video link (TikTok page → tikwm → oEmbed;
+//      other sites → schema.org Recipe JSON-LD → Open Graph tags).
+//   2. The video itself:
+//        - GEMINI_API_KEY set → Gemini watches the video (voice-over AND on-screen text).
+//        - otherwise          → OpenAI transcribes the audio and reads the cover image.
+//   3. OpenAI (or Gemini) writes the final recipe. When the post names the dish but leaves out
+//      amounts or steps, it fills in a classic home-cook version and flags it, so the user
+//      always gets real steps — never hashtags as ingredients.
+//
+// Secrets: OPENAI_API_KEY (required), GEMINI_API_KEY (optional, recommended),
+//          OPENAI_MODEL, OPENAI_TRANSCRIBE_MODEL, GEMINI_MODEL, MAX_VIDEO_BYTES (optional).
+
+import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+
 const DEFAULT_IMAGE =
   "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80&auto=format&fit=crop";
+const UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+const ESTIMATED_NOTE =
+  "The post didn't spell everything out, so FridgeGenie filled in amounts and steps for a classic version. Tweak anything below.";
 
 const corsHeaders: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers":
-    "authorization, x-client-info, apikey, content-type, x-requested-with",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 
 type SourcePlatform = "tiktok" | "instagram" | "facebook" | "snapchat" | "web" | "photo";
-
 type Ingredient = { name: string; qty: number | null; unit: string };
-
 type RecipeDraft = {
   title: string;
   image: string;
@@ -20,533 +39,429 @@ type RecipeDraft = {
   ingredients: Ingredient[];
   steps: string[];
   source: { platform: SourcePlatform; url: string | null; creator: string | null };
+  note?: string;
 };
-
-type TikTokMeta = {
+type PostInfo = {
   url: string;
+  platform: SourcePlatform;
   caption: string;
   creator: string | null;
   thumbnail: string | null;
-  mediaUrl: string | null;
+  videoUrls: string[];
+  structured: string | null; // schema.org Recipe JSON, when the site provides one
+};
+type Extracted = {
+  title: string;
+  servings: number | null;
+  cookTime: number | null;
+  ingredients: Ingredient[];
+  steps: string[];
+  estimated: boolean;
 };
 
-function json(data: unknown, init: ResponseInit = {}) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      ...corsHeaders,
-      ...(init.headers ?? {}),
-    },
+class UserFacingError extends Error {}
+
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", ...corsHeaders },
   });
-}
+
+const log = (...a: unknown[]) => console.log("[import-recipe]", ...a);
+
+// ───────────────────────── URL helpers ─────────────────────────
 
 function normalizeUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) throw new Error("Missing URL.");
-  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  const u = new URL(withScheme);
+  const m = raw.match(/https?:\/\/[^\s]+/i);
+  const trimmed = (m ? m[0] : raw).trim();
+  if (!trimmed) throw new UserFacingError("Missing link.");
+  const u = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
   u.hash = "";
   return u.toString();
 }
 
 function detectPlatform(url: string): SourcePlatform {
   const host = new URL(url).hostname.toLowerCase();
-  if (/(^|\.)tiktok\.com$/.test(host) || /(^|\.)vm\.tiktok\.com$/.test(host)) return "tiktok";
-  if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)instagr\.am$/.test(host)) return "instagram";
+  if (/(^|\.)tiktok\.com$/.test(host)) return "tiktok";
+  if (/(^|\.)(instagram\.com|instagr\.am)$/.test(host)) return "instagram";
   if (/(^|\.)(facebook\.com|fb\.watch|fb\.com)$/.test(host)) return "facebook";
   if (/(^|\.)snapchat\.com$/.test(host)) return "snapchat";
   return "web";
 }
 
-async function fetchText(url: string, timeoutMs: number): Promise<string> {
+async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 12_000): Promise<Response> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), timeoutMs);
+  const t = setTimeout(() => ac.abort(), ms);
   try {
-    const res = await fetch(url, {
+    return await fetch(url, {
       redirect: "follow",
+      ...init,
       signal: ac.signal,
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "accept-language": "en-US,en;q=0.9",
-      },
+      headers: { "user-agent": UA, "accept-language": "en-US,en;q=0.9", ...(init.headers ?? {}) },
     });
-    if (!res.ok) throw new Error(`Failed to fetch post (HTTP ${res.status}).`);
-    return await res.text();
   } finally {
     clearTimeout(t);
   }
 }
 
-function extractTikTokUniversalData(html: string): any {
-  const m = html.match(
-    /<script[^>]+id=["']__UNIVERSAL_DATA_FOR_REHYDRATION__["'][^>]*>([\s\S]*?)<\/script>/i,
-  );
-  if (!m?.[1]) throw new Error("Couldn't read this TikTok post (missing data block).");
+async function getText(url: string, ms = 12_000): Promise<{ html: string; finalUrl: string } | null> {
   try {
-    return JSON.parse(m[1]);
+    const res = await fetchWithTimeout(url, {}, ms);
+    if (!res.ok) return null;
+    return { html: await res.text(), finalUrl: res.url || url };
   } catch {
-    throw new Error("Couldn't read this TikTok post (invalid data block).");
+    return null;
   }
 }
 
-function pickTikTokMediaUrl(itemStruct: any): string | null {
-  const v = itemStruct?.video;
-  if (!v) return null;
-  const candidates: unknown[] = [
-    v?.downloadAddr,
-    v?.playAddr,
-    v?.playAddrH264,
-    v?.playAddrBytevc1,
-  ];
+const decodeEntities = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 
-  for (const c of candidates) {
-    if (typeof c === "string" && c.startsWith("http")) return c;
-    if (c && typeof c === "object") {
-      const urlList = (c as any).urlList;
-      if (Array.isArray(urlList) && typeof urlList[0] === "string") return urlList[0];
+function metaTag(html: string, prop: string): string | null {
+  const re = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content=["']([^"']*)["']|<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${prop}["']`,
+    "i",
+  );
+  const m = html.match(re);
+  const v = m?.[1] ?? m?.[2];
+  return v ? decodeEntities(v).trim() : null;
+}
+
+// ───────────────────────── Post details ─────────────────────────
+
+async function tiktokFromPage(url: string, info: PostInfo) {
+  const page = await getText(url);
+  if (!page) return;
+  info.url = page.finalUrl.split("?")[0] || info.url;
+  const m = page.html.match(/<script[^>]+id=["']__UNIVERSAL_DATA_FOR_REHYDRATION__["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!m?.[1]) return;
+  try {
+    const item = JSON.parse(m[1])?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct;
+    if (!item) return;
+    if (item.desc && !info.caption) info.caption = String(item.desc);
+    if (item.author?.uniqueId && !info.creator) info.creator = `@${item.author.uniqueId}`;
+    const v = item.video ?? {};
+    if (!info.thumbnail) info.thumbnail = v.cover ?? v.originCover ?? v.dynamicCover ?? null;
+    for (const c of [v.playAddr, v.downloadAddr, v.playAddrH264]) {
+      if (typeof c === "string" && c.startsWith("http")) info.videoUrls.push(c);
+      else if (Array.isArray(c?.urlList) && typeof c.urlList[0] === "string") info.videoUrls.push(c.urlList[0]);
+    }
+  } catch { /* ignore */ }
+}
+
+async function tiktokFromTikwm(url: string, info: PostInfo) {
+  try {
+    const res = await fetchWithTimeout(`https://www.tikwm.com/api/?hd=0&url=${encodeURIComponent(url)}`, {}, 12_000);
+    if (!res.ok) return;
+    const j = await res.json().catch(() => null) as any;
+    const d = j?.code === 0 ? j.data : null;
+    if (!d) return;
+    const abs = (p: unknown) => (typeof p === "string" && p ? (p.startsWith("http") ? p : `https://www.tikwm.com${p}`) : null);
+    if (d.title && !info.caption) info.caption = String(d.title);
+    if (d.author?.unique_id && !info.creator) info.creator = `@${d.author.unique_id}`;
+    if (!info.thumbnail) info.thumbnail = abs(d.origin_cover) ?? abs(d.cover);
+    const play = abs(d.play) ?? abs(d.wmplay);
+    if (play) info.videoUrls.unshift(play); // tikwm links download reliably from servers
+  } catch { /* ignore */ }
+}
+
+async function tiktokFromOembed(url: string, info: PostInfo) {
+  try {
+    const res = await fetchWithTimeout(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, {}, 8_000);
+    if (!res.ok) return;
+    const j = await res.json().catch(() => null) as any;
+    if (j?.title && !info.caption) info.caption = String(j.title);
+    if (j?.author_unique_id && !info.creator) info.creator = `@${j.author_unique_id}`;
+    if (j?.thumbnail_url && !info.thumbnail) info.thumbnail = String(j.thumbnail_url);
+  } catch { /* ignore */ }
+}
+
+function findRecipeJsonLd(html: string): any | null {
+  const blocks = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  const visit = (node: any): any | null => {
+    if (!node || typeof node !== "object") return null;
+    if (Array.isArray(node)) {
+      for (const n of node) { const r = visit(n); if (r) return r; }
+      return null;
+    }
+    const t = node["@type"];
+    if (t === "Recipe" || (Array.isArray(t) && t.includes("Recipe"))) return node;
+    return visit(node["@graph"]) ?? null;
+  };
+  for (const b of blocks) {
+    try { const r = visit(JSON.parse(b[1].trim())); if (r) return r; } catch { /* ignore */ }
+  }
+  return null;
+}
+
+async function genericFromPage(url: string, info: PostInfo) {
+  const page = await getText(url);
+  if (!page) return;
+  const { html } = page;
+  const recipe = findRecipeJsonLd(html);
+  if (recipe) {
+    info.structured = JSON.stringify({
+      name: recipe.name,
+      recipeYield: recipe.recipeYield,
+      totalTime: recipe.totalTime ?? recipe.cookTime,
+      recipeIngredient: recipe.recipeIngredient,
+      recipeInstructions: recipe.recipeInstructions,
+    }).slice(0, 12_000);
+    const img = Array.isArray(recipe.image) ? recipe.image[0] : recipe.image;
+    if (!info.thumbnail) info.thumbnail = typeof img === "string" ? img : img?.url ?? null;
+    if (!info.caption) info.caption = String(recipe.name ?? "");
+  }
+  const desc = [metaTag(html, "og:title"), metaTag(html, "og:description") ?? metaTag(html, "description")]
+    .filter(Boolean).join(" — ");
+  if (desc && !info.caption) info.caption = desc;
+  else if (desc && info.caption.length < 40) info.caption = `${info.caption} — ${desc}`;
+  if (!info.thumbnail) info.thumbnail = metaTag(html, "og:image");
+  const vid = metaTag(html, "og:video:secure_url") ?? metaTag(html, "og:video:url") ?? metaTag(html, "og:video");
+  if (vid?.startsWith("http")) info.videoUrls.push(vid);
+}
+
+async function getPostInfo(url: string): Promise<PostInfo> {
+  const platform = detectPlatform(url);
+  const info: PostInfo = { url, platform, caption: "", creator: null, thumbnail: null, videoUrls: [], structured: null };
+  if (platform === "tiktok") {
+    await tiktokFromPage(url, info);
+    await tiktokFromTikwm(info.url, info);
+    if (!info.caption || !info.thumbnail) await tiktokFromOembed(info.url, info);
+  } else {
+    await genericFromPage(url, info);
+  }
+  info.caption = info.caption.trim().slice(0, 4_000);
+  info.videoUrls = [...new Set(info.videoUrls)];
+  return info;
+}
+
+// ───────────────────────── Video ─────────────────────────
+
+async function downloadVideo(urls: string[], maxBytes: number): Promise<Uint8Array | null> {
+  for (const u of urls) {
+    try {
+      const res = await fetchWithTimeout(u, { headers: { referer: "https://www.tiktok.com/" } }, 25_000);
+      if (!res.ok) { log("video http", res.status); continue; }
+      const len = Number(res.headers.get("content-length") ?? "0");
+      if (len && len > maxBytes) { log("video too large", len); continue; }
+      const buf = new Uint8Array(await res.arrayBuffer());
+      if (buf.byteLength > 50_000 && buf.byteLength <= maxBytes) return buf;
+    } catch (e) {
+      log("video fetch failed", String(e));
     }
   }
   return null;
 }
 
-async function fetchTikTokMeta(url: string): Promise<TikTokMeta> {
-  const html = await fetchText(url, 12_000);
-  const data = extractTikTokUniversalData(html);
-  const scope = data?.__DEFAULT_SCOPE__;
-  const vd = scope?.["webapp.video-detail"];
-  const item = vd?.itemInfo?.itemStruct;
-  const caption: string | undefined = item?.desc;
-  if (!caption || !caption.trim()) throw new Error("Couldn't find a caption for that TikTok post.");
-  const uniqueId: string | undefined = item?.author?.uniqueId;
-  const creator = uniqueId ? `@${uniqueId}` : null;
-  const thumbnail: string | undefined =
-    item?.video?.cover ?? item?.video?.originCover ?? item?.video?.dynamicCover ?? item?.video?.thumbnail;
-  const mediaUrl = pickTikTokMediaUrl(item);
-
-  return {
-    url,
-    caption: caption.trim(),
-    creator,
-    thumbnail: thumbnail ?? null,
-    mediaUrl,
-  };
-}
-
-async function downloadCapped(url: string, maxBytes: number, timeoutMs: number): Promise<Uint8Array> {
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), timeoutMs);
+async function transcribe(bytes: Uint8Array): Promise<string | null> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) return null;
   try {
-    const head = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: ac.signal,
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        referer: "https://www.tiktok.com/",
-      },
-    }).catch(() => null);
-    const lenStr = head?.headers?.get("content-length");
-    if (lenStr) {
-      const len = Number(lenStr);
-      if (Number.isFinite(len) && len > maxBytes) throw new Error("Media too large to transcribe.");
-    }
-
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: ac.signal,
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        referer: "https://www.tiktok.com/",
-      },
+    const form = new FormData();
+    form.set("model", Deno.env.get("OPENAI_TRANSCRIBE_MODEL") ?? "gpt-4o-mini-transcribe");
+    form.set("file", new File([bytes], "video.mp4", { type: "video/mp4" }));
+    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}` },
+      body: form,
     });
-    if (!res.ok) throw new Error(`Media download failed (HTTP ${res.status}).`);
-
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.byteLength > maxBytes) throw new Error("Media too large to transcribe.");
-    return buf;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function transcribeWithOpenAI(audioBytes: Uint8Array, filename: string): Promise<string> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret.");
-  const model = Deno.env.get("OPENAI_TRANSCRIBE_MODEL") ?? "gpt-4o-mini-transcribe";
-
-  const form = new FormData();
-  form.set("model", model);
-  form.set("file", new File([audioBytes], filename, { type: "video/mp4" }));
-
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Transcription failed (HTTP ${res.status})${text ? `: ${text.slice(0, 200)}` : ""}`);
-  }
-  const json = await res.json().catch(() => null) as any;
-  const transcript = typeof json?.text === "string" ? json.text.trim() : "";
-  return transcript;
-}
-
-function guessTitleFromText(text: string): string | null {
-  const firstHashtag = text.trim().match(/^#([A-Za-z][A-Za-z0-9_-]+)/);
-  if (firstHashtag?.[1]) {
-    const raw = firstHashtag[1].replace(/_/g, " ");
-    const spaced = raw.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
-    if (spaced.length >= 4) return spaced;
-  }
-
-  const cleaned = text.replace(/\s+/g, " ").trim().slice(0, 180);
-  if (!cleaned) return null;
-  const stopIdx = cleaned.search(/\b(ingredients|directions|instructions|recipe)\b/i);
-  const head = stopIdx > 8 ? cleaned.slice(0, stopIdx).trim() : cleaned;
-  const head2 = head.replace(/[#@][\w.]+/g, "").trim();
-  if (!head2) return null;
-  const title = head2
-    .replace(/[🔥😩✨💛💚❤️📝⬇️]+/g, "")
-    .replace(/\b(bookmark( this)?|full recipe)\b.*$/i, "")
-    .trim();
-  if (title.length < 4) return null;
-  return title;
-}
-
-function tokenizeLines(block: string): string[] {
-  const normalized = block
-    .replace(/\r/g, "")
-    .replace(/\s+-\s+/g, "\n- ")
-    .replace(/\s+\*\s+/g, "\n- ")
-    .replace(/•/g, "-");
-  return normalized
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => (l.startsWith("-") ? l.replace(/^-+\s*/, "").trim() : l));
-}
-
-function parseFractional(s: string): number | null {
-  const t = s.trim();
-  const mixed = t.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-  if (mixed) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
-  const squashedMixed = t.match(/^(\d+)(\d)\/(\d+)$/);
-  if (squashedMixed) return Number(squashedMixed[1]) + Number(squashedMixed[2]) / Number(squashedMixed[3]);
-  const frac = t.match(/^(\d+)\/(\d+)$/);
-  if (frac) return Number(frac[1]) / Number(frac[2]);
-  const num = Number(t);
-  return Number.isFinite(num) ? num : null;
-}
-
-function normalizeUnit(u: string): string {
-  const unit = u.toLowerCase().replace(/\.$/, "");
-  const map: Record<string, string> = {
-    tbsp: "tbsp",
-    tablespoon: "tbsp",
-    tablespoons: "tbsp",
-    tsp: "tsp",
-    teaspoon: "tsp",
-    teaspoons: "tsp",
-    cup: "cup",
-    cups: "cup",
-    g: "g",
-    gram: "g",
-    grams: "g",
-    kg: "kg",
-    oz: "oz",
-    ounce: "oz",
-    ounces: "oz",
-    lb: "lb",
-    lbs: "lb",
-    pound: "lb",
-    pounds: "lb",
-    ml: "ml",
-    l: "l",
-    clove: "cloves",
-    cloves: "cloves",
-    stick: "stick",
-    sticks: "stick",
-    can: "can",
-    cans: "can",
-    pinch: "pinch",
-    handful: "handful",
-  };
-  return map[unit] ?? unit;
-}
-
-function explodeIngredientRuns(block: string): string {
-  const s = block.replace(/\r/g, " ").replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
-  const matches = [...s.matchAll(/\b(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)(?:\s*-\s*\d+(?:\.\d+)?)?\s+[A-Za-z]/g)];
-  if (matches.length <= 1) return block;
-  const parts: string[] = [];
-  for (let i = 0; i < matches.length; i++) {
-    const start = matches[i]?.index ?? 0;
-    const end = (matches[i + 1]?.index ?? s.length);
-    const part = s.slice(start, end).trim();
-    if (part) parts.push(part);
-  }
-  return parts.join("\n");
-}
-
-function parseQtyUnitName(line: string): { qty: number | null; unit: string; name: string } {
-  const original = line.trim();
-  const m = original.match(
-    /^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s+([a-zA-Z]+\.?)\s+(.+)$/,
-  );
-  if (!m) return { qty: null, unit: "", name: original };
-  const qtyText = m[1];
-  const unitText = m[3];
-  const nameText = m[4];
-  if (!qtyText || !unitText || !nameText) return { qty: null, unit: "", name: original };
-  const qty1 = parseFractional(qtyText);
-  const qty2 = m[2] ? Number(m[2]) : null;
-  const qty = qty2 ? (qty1 != null ? (qty1 + qty2) / 2 : qty2) : qty1;
-  const unit = normalizeUnit(unitText);
-  const name = nameText.trim();
-  return { qty: qty ?? null, unit, name };
-}
-
-function heuristicStructure(
-  text: string,
-  titleHint: string | null,
-): { title: string; servings: number; cookTime: number; ingredients: Ingredient[]; steps: string[] } | null {
-  const ingredientsMatch = text.match(/\b(ingredients?|recipe)\b\s*[:\-]?\s*/i);
-  const directionsMatch = text.match(/\b(directions?|instructions?|method|steps)\b\s*[:\-]?\s*/i);
-
-  let title = titleHint ?? guessTitleFromText(text) ?? "Recipe";
-  title = title.replace(/\s+/g, " ").trim();
-
-  const ingredientsBlock =
-    ingredientsMatch && ingredientsMatch.index != null
-      ? text.slice(
-        ingredientsMatch.index + ingredientsMatch[0].length,
-        directionsMatch && directionsMatch.index != null && directionsMatch.index > ingredientsMatch.index
-          ? directionsMatch.index
-          : text.length,
-      )
-      : null;
-  const directionsBlock =
-    directionsMatch && directionsMatch.index != null ? text.slice(directionsMatch.index + directionsMatch[0].length) : null;
-
-  const ingredients: Ingredient[] = [];
-  if (ingredientsBlock) {
-    const exploded = explodeIngredientRuns(ingredientsBlock);
-    for (const line of tokenizeLines(exploded)) {
-      if (/^for (the )?/i.test(line) && (/:$/.test(line) || /\*$/.test(line))) continue;
-      if (/^\*.*\*$/.test(line)) continue;
-      if (/:$/.test(line)) continue;
-      const { qty, unit, name } = parseQtyUnitName(line);
-      if (!name || name.length < 2) continue;
-      ingredients.push({ name, qty, unit });
-    }
-  }
-
-  const steps: string[] = [];
-  if (directionsBlock) {
-    const raw = directionsBlock.trim();
-    const numbered = raw.split(/\b\d+\.\s*/).map((s) => s.trim()).filter(Boolean);
-    if (numbered.length >= 2) {
-      for (const s of numbered) steps.push(s.replace(/\s+/g, " ").trim());
-    } else {
-      for (const line of tokenizeLines(raw)) {
-        if (/^tips?\b/i.test(line)) continue;
-        if (line.length < 6) continue;
-        steps.push(line);
-      }
-    }
-  }
-
-  if (ingredients.length === 0 && steps.length === 0) return null;
-  return {
-    title,
-    servings: 2,
-    cookTime: 30,
-    ingredients: ingredients.length ? ingredients : [{ name: "", qty: null, unit: "" }],
-    steps: steps.length ? steps : [""],
-  };
-}
-
-async function extractRecipeWithOpenAI(input: {
-  url: string;
-  platform: SourcePlatform;
-  creator: string | null;
-  thumbnail: string | null;
-  caption: string;
-  transcript: string | null;
-}): Promise<RecipeDraft> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret.");
-  const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
-
-  const titleHint = guessTitleFromText(input.caption) ?? null;
-  const prompt = [
-    "Extract a cooking recipe from the provided post content.",
-    "",
-    "Hard rules:",
-    "- Use ONLY information explicitly present in the caption/transcript. Do not invent any ingredients or steps.",
-    "- If the recipe cannot be determined (no clear ingredients and no clear steps), respond with JSON: {\"ok\":false,\"reason\":\"...\"}.",
-    "- Otherwise respond with JSON: {\"ok\":true,\"recipe\":{...}}.",
-    "",
-    "Recipe JSON shape:",
-    "{",
-    "  title: string,",
-    "  servings: number | null,",
-    "  cookTime: number | null,",
-    "  ingredients: Array<{ name: string, qty: number | null, unit: string }>,",
-    "  steps: string[]",
-    "}",
-    "",
-    `URL: ${input.url}`,
-    `PLATFORM: ${input.platform}`,
-    `CREATOR: ${input.creator ?? ""}`,
-    `TITLE_HINT: ${titleHint ?? ""}`,
-    "",
-    "CAPTION:",
-    input.caption,
-    "",
-    "TRANSCRIPT:",
-    input.transcript ?? "",
-  ].join("\n");
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      messages: [
-        { role: "system", content: "You extract recipes and output strict JSON only." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`LLM extraction failed (HTTP ${res.status})${text ? `: ${text.slice(0, 200)}` : ""}`);
-  }
-
-  const raw = await res.json().catch(() => null) as any;
-  const content = raw?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) throw new Error("LLM extraction failed (empty response).");
-
-  const parsed = safeJsonParse(content);
-  if (!parsed) throw new Error("LLM extraction failed (invalid JSON).");
-  if (parsed.ok === false) throw new Error("Couldn't find the recipe in that post.");
-  const recipe = parsed.recipe;
-  if (!recipe || typeof recipe.title !== "string") throw new Error("LLM extraction failed (invalid recipe).");
-
-  const ingredients: Ingredient[] = Array.isArray(recipe.ingredients)
-    ? recipe.ingredients
-      .filter((i: any) => i && typeof i.name === "string")
-      .map((i: any) => ({ name: String(i.name), qty: typeof i.qty === "number" ? i.qty : null, unit: typeof i.unit === "string" ? i.unit : "" }))
-    : [];
-  const steps: string[] = Array.isArray(recipe.steps) ? recipe.steps.filter((s: any) => typeof s === "string" && s.trim()).map((s: string) => s.trim()) : [];
-
-  const title = recipe.title.trim();
-  if (!title) throw new Error("Couldn't find the recipe in that post.");
-  if (ingredients.length === 0 && steps.length === 0) throw new Error("Couldn't find the recipe in that post.");
-
-  return {
-    title,
-    image: input.thumbnail ?? DEFAULT_IMAGE,
-    servings: typeof recipe.servings === "number" && Number.isFinite(recipe.servings) ? recipe.servings : 2,
-    cookTime: typeof recipe.cookTime === "number" && Number.isFinite(recipe.cookTime) ? recipe.cookTime : 30,
-    ingredients: ingredients.length ? ingredients : [{ name: "", qty: null, unit: "" }],
-    steps: steps.length ? steps : [""],
-    source: { platform: input.platform, url: input.url, creator: input.creator },
-  };
-}
-
-function safeJsonParse(s: string): any | null {
-  try {
-    return JSON.parse(s);
+    if (!res.ok) { log("transcribe http", res.status); return null; }
+    const j = await res.json().catch(() => null) as any;
+    const text = typeof j?.text === "string" ? j.text.trim() : "";
+    return text || null;
   } catch {
-    const m = s.match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    try {
-      return JSON.parse(m[0]);
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
+
+// ───────────────────────── Recipe writing ─────────────────────────
+
+const RECIPE_RULES = `
+You turn a food post (a short cooking video, its caption, or a recipe web page) into a clean recipe a home cook can follow.
+
+Return ONLY JSON:
+{"ok":true,"recipe":{"title":string,"servings":number|null,"cookTime":number|null,"ingredients":[{"name":string,"qty":number|null,"unit":string}],"steps":[string],"estimated":boolean}}
+or {"ok":false,"reason":string} ONLY if the post is clearly not about food at all.
+
+Rules:
+- Use everything the post actually says or shows first: spoken words, on-screen text, caption, recipe card.
+- If the post names or shows a dish but leaves out amounts, ingredients or steps, fill the gaps with a classic, reliable home-cook version of THAT dish, consistent with what is shown, and set "estimated": true. Never return an empty ingredient list or empty steps.
+- Title: the dish name in Title Case. No hashtags, emoji, @handles, bullets or "recipe"/"easy" filler.
+- Ingredients: real foods only. Never hashtags, usernames or words like "cooking" or "foodie". qty is a number (0.5 not "1/2") or null; unit is short (g, kg, ml, cup, tbsp, tsp, oz, lb, clove, can, pinch) or "" for whole items.
+- Steps: 4–10 short imperative steps, one action each, with times and heat where relevant ("Cook 5 min over medium-high heat").
+- cookTime: total minutes. servings: number of people.`;
+
+function sanitize(raw: any): Extracted | null {
+  const r = raw?.recipe ?? raw;
+  if (!r || typeof r !== "object") return null;
+  const clean = (s: string) => s.replace(/[#@][\w.]+/g, "").replace(/[•·|]+/g, " ").replace(/\s+/g, " ").trim();
+  const title = clean(String(r.title ?? "")).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/gu, "");
+  const ingredients: Ingredient[] = (Array.isArray(r.ingredients) ? r.ingredients : [])
+    .map((i: any) => {
+      let qty = typeof i?.qty === "number" && Number.isFinite(i.qty) ? i.qty : null;
+      let unit = typeof i?.unit === "string" ? i.unit.trim() : "";
+      // Models sometimes put the amount in the unit ("3/4 cup", "1 1/2 tbsp") — move it into qty.
+      const m = unit.match(/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(.*)$/);
+      if (m) {
+        const [w, f] = m[1].includes(" ") ? m[1].split(/\s+/) : ["0", m[1]];
+        const frac = (s: string) => (s.includes("/") ? Number(s.split("/")[0]) / Number(s.split("/")[1]) : Number(s));
+        const n = Number(w) + frac(f);
+        if (Number.isFinite(n) && n > 0) { qty = Math.round(n * 100) / 100; unit = m[2].trim(); }
+      }
+      return { name: clean(String(i?.name ?? "")), qty, unit };
+    })
+    .filter((i: Ingredient) => i.name.length > 1 && !/^(cooking|foodie|recipe|food|fyp|viral)$/i.test(i.name));
+  const steps: string[] = (Array.isArray(r.steps) ? r.steps : [])
+    .map((s: any) => clean(String(s ?? "")).replace(/^\d+[.)]\s*/, ""))
+    .filter((s: string) => s.length > 3);
+  if (!title || ingredients.length === 0 || steps.length === 0) return null;
+  return {
+    title,
+    servings: typeof r.servings === "number" && r.servings > 0 ? Math.round(r.servings) : null,
+    cookTime: typeof r.cookTime === "number" && r.cookTime > 0 ? Math.round(r.cookTime) : null,
+    ingredients,
+    steps,
+    estimated: r.estimated === true,
+  };
+}
+
+function parseJson(s: string): any | null {
+  try { return JSON.parse(s); } catch { /* fall through */ }
+  const m = s.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch { return null; }
+}
+
+function describePost(info: PostInfo, transcript: string | null): string {
+  return [
+    `LINK: ${info.url}`,
+    `PLATFORM: ${info.platform}`,
+    `CREATOR: ${info.creator ?? "unknown"}`,
+    "",
+    "CAPTION / PAGE TEXT:",
+    info.caption || "(none)",
+    info.structured ? `\nRECIPE DATA FROM THE PAGE (schema.org):\n${info.structured}` : "",
+    transcript ? `\nSPOKEN IN THE VIDEO (transcript):\n${transcript.slice(0, 6_000)}` : "",
+  ].join("\n");
+}
+
+async function withGemini(info: PostInfo, video: Uint8Array): Promise<Extracted | null> {
+  const key = Deno.env.get("GEMINI_API_KEY");
+  if (!key) return null;
+  const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [
+              { inline_data: { mime_type: "video/mp4", data: encodeBase64(video) } },
+              {
+                text: `${RECIPE_RULES}\n\nWatch the whole video. Read every on-screen text overlay and listen to the voice-over; ` +
+                  `also look at what is added to the pan or bowl.\n\n${describePost(info, null)}`,
+              },
+            ],
+          }],
+          generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+        }),
+      },
+    );
+    if (!res.ok) { log("gemini http", res.status, (await res.text().catch(() => "")).slice(0, 200)); return null; }
+    const j = await res.json().catch(() => null) as any;
+    const text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
+    const parsed = parseJson(text);
+    if (parsed?.ok === false) throw new UserFacingError("That post doesn't look like a recipe.");
+    return sanitize(parsed);
+  } catch (e) {
+    if (e instanceof UserFacingError) throw e;
+    log("gemini failed", String(e));
+    return null;
+  }
+}
+
+async function withOpenAI(info: PostInfo, transcript: string | null): Promise<Extracted | null> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) return null;
+  const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+  const ask = async (withImage: boolean) => {
+    const content: any[] = [{ type: "text", text: `${describePost(info, transcript)}\n\nThe image (if any) is the video's cover frame — read any text on it.` }];
+    if (withImage && info.thumbnail) content.push({ type: "image_url", image_url: { url: info.thumbnail, detail: "low" } });
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [{ role: "system", content: RECIPE_RULES }, { role: "user", content }],
+      }),
+    });
+    if (!res.ok) { log("openai http", res.status, (await res.text().catch(() => "")).slice(0, 200)); return null; }
+    const j = await res.json().catch(() => null) as any;
+    return parseJson(j?.choices?.[0]?.message?.content ?? "");
+  };
+  let parsed = await ask(true).catch(() => null);
+  if (!parsed) parsed = await ask(false).catch(() => null); // cover image unreachable → text only
+  if (parsed?.ok === false) throw new UserFacingError("That post doesn't look like a recipe.");
+  return sanitize(parsed);
+}
+
+// ───────────────────────── Handler ─────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    if (!Deno.env.get("OPENAI_API_KEY")) {
-      return json({ error: "Server is not configured for recipe import." }, { status: 500 });
+    if (!Deno.env.get("OPENAI_API_KEY") && !Deno.env.get("GEMINI_API_KEY")) {
+      return json({ error: "Server is not configured for recipe import." }, 500);
     }
-
     const body = await req.json().catch(() => null) as any;
-    const rawUrl = typeof body?.url === "string" ? body.url : "";
-    const url = normalizeUrl(rawUrl);
-    const platform = detectPlatform(url);
+    const url = normalizeUrl(typeof body?.url === "string" ? body.url : "");
 
-    if (platform !== "tiktok") {
-      return json({ error: "Only TikTok URLs are supported right now." }, { status: 422 });
+    const info = await getPostInfo(url);
+    log("post", info.platform, { caption: info.caption.slice(0, 80), videos: info.videoUrls.length, structured: !!info.structured });
+    if (!info.caption && !info.videoUrls.length && !info.structured) {
+      throw new UserFacingError("Couldn't open that post. It may be private.");
     }
 
-    const meta = await fetchTikTokMeta(url);
+    const maxBytes = Number(Deno.env.get("MAX_VIDEO_BYTES") ?? "18000000");
+    const needVideo = !info.structured; // a site's recipe card beats any video
+    const video = needVideo && info.videoUrls.length ? await downloadVideo(info.videoUrls, maxBytes) : null;
+    log("video bytes", video?.byteLength ?? 0);
 
-    // Best-effort transcription (size/time capped). If media fetch fails, fall back to caption-only.
-    const maxBytes = Number(Deno.env.get("MAX_TIKTOK_MEDIA_BYTES") ?? "20000000"); // 20MB
-    let transcript: string | null = null;
-    if (meta.mediaUrl) {
-      try {
-        const bytes = await downloadCapped(meta.mediaUrl, maxBytes, 18_000);
-        transcript = await transcribeWithOpenAI(bytes, "tiktok.mp4");
-      } catch {
-        transcript = null;
-      }
+    let recipe: Extracted | null = null;
+    let method = "";
+    if (video) {
+      recipe = await withGemini(info, video);
+      if (recipe) method = "gemini-video";
     }
-
-    // Primary: LLM combines caption + transcript (strict no-invention).
-    // Fallback: deterministic caption parser (still no invention, but less capable).
-    let recipe: RecipeDraft | null = null;
-    try {
-      recipe = await extractRecipeWithOpenAI({
-        url,
-        platform: "tiktok",
-        creator: meta.creator,
-        thumbnail: meta.thumbnail,
-        caption: meta.caption,
-        transcript,
-      });
-    } catch {
-      recipe = null;
-    }
-
     if (!recipe) {
-      const titleHint = guessTitleFromText(meta.caption) ?? null;
-      const heur = heuristicStructure(meta.caption, titleHint);
-      if (!heur) throw new Error("Couldn't find the recipe in that post.");
-      recipe = {
-        title: heur.title,
-        image: meta.thumbnail ?? DEFAULT_IMAGE,
-        servings: heur.servings,
-        cookTime: heur.cookTime,
-        ingredients: heur.ingredients,
-        steps: heur.steps,
-        source: { platform: "tiktok", url, creator: meta.creator },
-      };
+      const transcript = video ? await transcribe(video) : null;
+      recipe = await withOpenAI(info, transcript);
+      if (recipe) method = transcript ? "openai-transcript" : "openai-caption";
     }
+    if (!recipe) throw new UserFacingError("Couldn't find the recipe in that post.");
+    log("done", method, recipe.title, { ingredients: recipe.ingredients.length, steps: recipe.steps.length, estimated: recipe.estimated });
 
-    return json({ recipe }, { status: 200 });
+    const draft: RecipeDraft = {
+      title: recipe.title,
+      image: info.thumbnail ?? DEFAULT_IMAGE,
+      servings: recipe.servings ?? 2,
+      cookTime: recipe.cookTime ?? 30,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps,
+      source: { platform: info.platform, url: info.url, creator: info.creator },
+      ...(recipe.estimated ? { note: ESTIMATED_NOTE } : {}),
+    };
+    return json({ recipe: draft, method });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Import failed";
-    return json({ error: message }, { status: 422 });
+    const message = e instanceof UserFacingError ? e.message : "Import failed";
+    log("error", String(e));
+    return json({ error: message }, 422);
   }
 });
-

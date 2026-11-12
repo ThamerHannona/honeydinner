@@ -63,7 +63,7 @@ export default function ImportReview() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1" testID="import-review-screen" style={{ backgroundColor: C.cream }}>
       <SheetHeader title={isManual ? 'Type it in' : 'Save to Honey, Dinner?'} subtitle={isManual ? 'Make it one of your keepers.' : 'Preview recipe · review and edit before saving.'} />
       <KeyboardAwareScrollView bottomOffset={16} testID="import-review-form" style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-        <GenieBubble testID="review-ready-banner"><Txt weight="bold" style={{ color: C.honeyOnForest }}>A recipe worth keeping.</Txt>{'\n'}{isManual ? 'Add your ingredients and steps below.' : 'This is a sample import. Everything below is editable.'}</GenieBubble>
+        <GenieBubble testID="review-ready-banner"><Txt weight="bold" style={{ color: C.honeyOnForest }}>A recipe worth keeping.</Txt>{'\n'}{isManual ? 'Add your ingredients and steps below.' : d.note ?? 'Pulled from the post. Everything below is editable.'}</GenieBubble>
 
         {/* Photo */}
         <View className="mt-5 items-center rounded-[24px] border py-4" style={{ borderColor: C.ink, backgroundColor: C.leafSoft }}>

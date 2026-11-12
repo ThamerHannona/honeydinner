@@ -43,6 +43,8 @@ export interface Recipe {
   ingredients: Ingredient[];
   steps: string[];
   source: RecipeSource;
+  /** Set by the importer when it had to fill gaps the post didn't state (e.g. amounts). */
+  note?: string;
   saved: boolean;
   importedAt: string | null;
   createdAt: string;

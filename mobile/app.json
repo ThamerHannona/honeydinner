@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.shakeandbakelabs.honeydinner",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Honey, Dinner? uses the camera to scan your fridge, receipts and cookbook pages.",
@@ -47,6 +47,25 @@
         "expo-image-picker",
         {
           "photosPermission": "Honey, Dinner? uses your photos to import recipes from screenshots and cookbook pictures."
+        }
+      ],
+      [
+        "./plugins/with-share-extension-name",
+        {
+          "displayName": "Honey, Dinner?"
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1
+          },
+          "androidIntentFilters": [
+            "text/*"
+          ]
         }
       ]
     ],
