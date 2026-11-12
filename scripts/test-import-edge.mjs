@@ -2,6 +2,8 @@ const URLS = [
   "https://www.tiktok.com/@cookingwithkianaa/video/7514784389268557086",
   "https://www.tiktok.com/@geoffreyzakarian/video/7480299561106361646",
   "https://www.tiktok.com/@gidsgids/video/7468087658774826282?lang=en",
+  // Minimal caption (recipe mostly in the video): this is the audio/transcription stress test.
+  "https://www.tiktok.com/@briscoeskitchenandspice/video/7655428988029947167",
 ];
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
