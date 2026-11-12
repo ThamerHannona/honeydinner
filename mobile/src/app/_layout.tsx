@@ -10,6 +10,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useFonts } from 'expo-font';
 import { Fraunces_600SemiBold, Fraunces_600SemiBold_Italic } from '@expo-google-fonts/fraunces';
 import { BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold } from '@expo-google-fonts/barlow-condensed';
+import { CaveatBrush_400Regular } from '@expo-google-fonts/caveat-brush';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { ToastHost } from '@/components/app';
 import { LaunchIntro } from '@/components/launch-intro';
@@ -77,7 +78,7 @@ function ThemedRoot() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({ Fraunces_600SemiBold, Fraunces_600SemiBold_Italic, BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  const [fontsLoaded, fontError] = useFonts({ Fraunces_600SemiBold, Fraunces_600SemiBold_Italic, BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold, CaveatBrush_400Regular, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   const hydrated = useApp((s) => s.hydrated);
   if (!(fontsLoaded || !!fontError) || !hydrated) return null;
   return (
