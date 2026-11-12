@@ -8,6 +8,10 @@ const envSchema = z.object({
   // Server Configuration
   PORT: z.string().optional().default("3000"),
   NODE_ENV: z.string().optional(),
+
+  // Optional: enable LLM-assisted structuring (caption → recipe JSON)
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().optional().default("gpt-4o-mini"),
 });
 
 /**

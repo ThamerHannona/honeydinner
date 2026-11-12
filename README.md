@@ -4,6 +4,15 @@ A household dinner app for couples and families. It answers "what should we make
 
 **v1 runs entirely on mock data with simulated AI and scanning.** All data lives on the device (Zustand + AsyncStorage).
 
+## Recipe import (real extraction)
+The mobile app’s import flow now calls the backend to extract the *actual* recipe from a shared/pasted link (TikTok prioritized).
+
+- **Mobile env var (required)**: `EXPO_PUBLIC_BACKEND_URL` (must point to your deployed backend; used by `mobile/src/lib/api/api.ts`)
+- **Backend env vars**:
+  - `PORT` (optional)
+  - `OPENAI_API_KEY` (optional): enables higher-quality structuring when captions are messy; when unset the backend uses deterministic caption parsing and will **fail** if it can’t determine the recipe (no random fallback)
+  - `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
+
 ## Brand
 - Editorial kitchen / sticker-pop light theme: cream `#F4EDE0`, ink `#14110D`, green `#1DAF3A`, forest `#14702A`, honey `#F4AA22`, alert `#FF5A3C`.
 - Fonts: Fraunces 600 + real italic for headlines, Barlow Condensed 700/800 for uppercase labels and logo, Inter 400/500/600/700 for body and buttons.
