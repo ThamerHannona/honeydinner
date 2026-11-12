@@ -7,8 +7,7 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "studio": "cloud-studio --port 3001 --hostname 0.0.0.0",
-    "typecheck": "tsc --noEmit",
-    "test:import": "bun run scripts/test-import.ts"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest",

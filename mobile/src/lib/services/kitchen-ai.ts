@@ -1,5 +1,4 @@
 import { guessEmoji } from '../kitchen';
-import { api } from '../api/api';
 import type { DetectedItem, Ingredient, RecipeDraft, SourcePlatform } from '../types';
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -101,7 +100,13 @@ export async function importRecipe(
     onStep('caption');
     if (looksUnreadable(url)) throw new ImportFailedError("Couldn't find the recipe in that post.");
 
-    // Keep the existing progress UI moving while the backend does the real work.
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new ImportFailedError("Couldn't find the recipe in that post.");
+    }
+
+    // Keep the existing progress UI moving while the Edge Function does the real work.
     let stopped = false;
     const steps: ImportStep[] = ['caption', 'audio', 'onscreen'];
     let idx = 0;
@@ -112,12 +117,23 @@ export async function importRecipe(
     };
     const timer = setInterval(tick, 900);
     try {
-      const res = await api.post<{ recipe: RecipeDraft }>('/api/import/recipe', { url });
+      const res = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/import-recipe`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          apikey: supabaseAnonKey,
+          authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) throw new Error('Import failed');
+      const data = (await res.json().catch(() => null)) as null | { recipe?: RecipeDraft };
+      if (!data?.recipe) throw new Error('Import failed');
       onStep('writing');
       return {
-        ...res.recipe,
+        ...data.recipe,
         // Ensure platform/url reflect what the user imported (backend may normalize internally).
-        source: { ...res.recipe.source, platform, url },
+        source: { ...data.recipe.source, platform, url },
       };
     } catch {
       throw new ImportFailedError("Couldn't find the recipe in that post.");

@@ -5,13 +5,17 @@ A household dinner app for couples and families. It answers "what should we make
 **v1 runs entirely on mock data with simulated AI and scanning.** All data lives on the device (Zustand + AsyncStorage).
 
 ## Recipe import (real extraction)
-The mobile app’s import flow now calls the backend to extract the *actual* recipe from a shared/pasted link (TikTok prioritized).
+The mobile app’s import flow calls a **Supabase Edge Function** to extract the *actual* recipe from a shared/pasted link (TikTok prioritized). It uses the TikTok caption and (best-effort) audio transcription, then structures the recipe with an LLM **without inventing**.
 
-- **Mobile env var (required)**: `EXPO_PUBLIC_BACKEND_URL` (must point to your deployed backend; used by `mobile/src/lib/api/api.ts`)
-- **Backend env vars**:
-  - `PORT` (optional)
-  - `OPENAI_API_KEY` (optional): enables higher-quality structuring when captions are messy; when unset the backend uses deterministic caption parsing and will **fail** if it can’t determine the recipe (no random fallback)
-  - `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
+- **Mobile (EAS env vars, required)**:
+  - `EXPO_PUBLIC_SUPABASE_URL`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- **Supabase Edge Function secrets (required)**:
+  - `OPENAI_API_KEY`
+- **Supabase Edge Function secrets (optional)**:
+  - `OPENAI_MODEL` (default `gpt-4o-mini`)
+  - `OPENAI_TRANSCRIBE_MODEL` (default `gpt-4o-mini-transcribe`)
+  - `MAX_TIKTOK_MEDIA_BYTES` (default `20000000`)
 
 ## Brand
 - Editorial kitchen / sticker-pop light theme: cream `#F4EDE0`, ink `#14110D`, green `#1DAF3A`, forest `#14702A`, honey `#F4AA22`, alert `#FF5A3C`.
@@ -88,3 +92,13 @@ The four tabs retain Tonight / Recipes / Kitchen / List navigation. Their shared
 - `backend/` is Vibecode's starter server (only a sample route). The app does not call it in v1.
 - **Never commit `.env` files.** `backend/.env` contains API keys; the root `.gitignore` excludes every `.env*` file.
 - Import/scan AI is still mocked in `mobile/src/lib/services/kitchen-ai.ts`. Making it real needs your own AI key on a server you control (e.g. a Supabase Edge Function), never inside the app.
+
+## Supabase Edge Function deploy (importer)
+- **Link project**: `supabase link --project-ref <your-project-ref>`
+- **Set required secrets**:
+  - `supabase secrets set OPENAI_API_KEY=...`
+  - Optional: `supabase secrets set OPENAI_MODEL=gpt-4o-mini OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe MAX_TIKTOK_MEDIA_BYTES=20000000`
+- **Deploy**: `supabase functions deploy import-recipe`
+
+Test (after deploy) from your machine:
+- `SUPABASE_URL=... SUPABASE_ANON_KEY=... node scripts/test-import-edge.mjs`
