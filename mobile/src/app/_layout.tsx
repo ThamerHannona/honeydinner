@@ -10,8 +10,10 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useFonts } from 'expo-font';
 import { Fraunces_600SemiBold, Fraunces_600SemiBold_Italic } from '@expo-google-fonts/fraunces';
 import { BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold } from '@expo-google-fonts/barlow-condensed';
+import { CaveatBrush_400Regular } from '@expo-google-fonts/caveat-brush';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { ToastHost } from '@/components/app';
+import { LaunchIntro } from '@/components/launch-intro';
 import { useApp } from '@/lib/store';
 import { ThemeProvider, themeVariables, useTheme } from '@/lib/theme-context';
 
@@ -58,14 +60,17 @@ function RootLayoutNav() {
 
 function ThemedRoot() {
   const { C, isDark } = useTheme();
-  const onLayout = useCallback(() => { SplashScreen.hideAsync().catch(() => {}); }, []);
+  const [introDone, setIntroDone] = useState<boolean>(false);
+  const onIntroReady = useCallback(() => { SplashScreen.hideAsync().catch(() => {}); }, []);
+  const onIntroComplete = useCallback(() => { setIntroDone(true); }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.cream }}>
-      <View testID="app-theme-root" onLayout={onLayout} style={[{ flex: 1, backgroundColor: C.cream }, themeVariables(C)]}>
+      <View testID="app-theme-root" style={[{ flex: 1, backgroundColor: C.cream }, themeVariables(C)]}>
         <KeyboardProvider>
           <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={C.cream} />
           <RootLayoutNav />
           <ToastHost />
+          {introDone ? null : <LaunchIntro onReady={onIntroReady} onComplete={onIntroComplete} />}
         </KeyboardProvider>
       </View>
     </GestureHandlerRootView>
@@ -73,7 +78,7 @@ function ThemedRoot() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({ Fraunces_600SemiBold, Fraunces_600SemiBold_Italic, BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  const [fontsLoaded, fontError] = useFonts({ Fraunces_600SemiBold, Fraunces_600SemiBold_Italic, BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold, CaveatBrush_400Regular, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   const hydrated = useApp((s) => s.hydrated);
   if (!(fontsLoaded || !!fontError) || !hydrated) return null;
   return (

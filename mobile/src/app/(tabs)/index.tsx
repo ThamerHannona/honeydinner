@@ -1,16 +1,25 @@
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
+import { signature } from '@/lib/theme';
 import React, { useMemo } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { RecipeImage as Image } from '@/components/recipe-image';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUpRight, Heart } from 'lucide-react-native';
 import { Logo } from '@/components/brand';
-import { Avatar, PressableScale, Txt, HardShadow, Highlight, GenieBubble, MatchStamp, StatusDot } from '@/components/ui';
+import { Avatar, PressableScale, Txt, HardShadow, GenieBubble, MatchStamp, StatusDot } from '@/components/ui';
 import { pantryGreeting } from '@/lib/genie';
 import { expiryLabel, freshness, matchRecipe, rankSuggestions } from '@/lib/kitchen';
 import { useApp } from '@/lib/store';
+
+/** Tonight heading only — Caveat Brush; other screens keep Fraunces. */
+const TONIGHT_SCRIPT = {
+  fontFamily: 'CaveatBrush_400Regular',
+  fontSize: 42,
+  lineHeight: 48,
+  letterSpacing: -0.5,
+} as const;
 
 
 export default function TonightScreen() {
@@ -42,9 +51,23 @@ export default function TonightScreen() {
         </View>
         <View className="px-5">
           <Txt label weight="extrabold" className="mb-2 text-[15px] uppercase tracking-wider">{day} <Txt style={{ color: C.leaf }}>●</Txt> DINNER</Txt>
-          <Txt display weight="bold" className="text-[38px] leading-[43px]" style={{ letterSpacing: -1.3 }}>What’s for dinner,</Txt>
-          <View className="mb-5 self-start">
-            <Highlight style={{ fontSize: 38, lineHeight: 45, letterSpacing: -1.3 }}>honey?</Highlight>
+          <Text accessibilityRole="header" style={[TONIGHT_SCRIPT, { color: C.ink }]}>What’s for dinner,</Text>
+          <View className="mb-5 self-start" style={{ position: 'relative', paddingHorizontal: signature.highlight.padding }}>
+            <View
+              accessible={false}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: signature.highlight.top,
+                bottom: signature.highlight.bottom,
+                left: 0,
+                right: 0,
+                borderRadius: signature.highlight.radius,
+                backgroundColor: C.honey,
+                transform: [{ rotate: signature.highlight.rotate }],
+              }}
+            />
+            <Text style={[TONIGHT_SCRIPT, { color: C.onHoney, fontSize: 44, lineHeight: 50 }]}>honey?</Text>
           </View>
           <GenieBubble testID="fridgegenie-greeting-card" style={{ marginBottom: 24 }}>
             <Txt testID="fridgegenie-greeting" style={{ color: C.onGreen, fontSize: 14, lineHeight: 20 }}>{pantryGreeting(pantry)}</Txt>
