@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.shakeandbakelabs.honeydinner",
-      "buildNumber": "6",
+      "buildNumber": "7",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Honey, Dinner? uses the camera to scan your fridge, receipts and cookbook pages.",
@@ -56,15 +56,31 @@
         }
       ],
       [
-        "expo-share-intent",
+        "expo-share-extension",
         {
-          "iosActivationRules": {
-            "NSExtensionActivationSupportsText": true,
-            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
-            "NSExtensionActivationSupportsWebPageWithMaxCount": 1
+          "activationRules": [
+            {
+              "type": "url",
+              "max": 1
+            },
+            {
+              "type": "text"
+            }
+          ],
+          "backgroundColor": {
+            "red": 0,
+            "green": 0,
+            "blue": 0,
+            "alpha": 0
           },
-          "androidIntentFilters": [
-            "text/*"
+          "height": 620,
+          "excludedPackages": [
+            "expo-dev-client",
+            "expo-splash-screen",
+            "expo-updates",
+            "expo-camera",
+            "react-native-vision-camera",
+            "expo-speech-recognition"
           ]
         }
       ],

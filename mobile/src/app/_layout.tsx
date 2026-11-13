@@ -1,6 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
-import { Stack, router } from 'expo-router';
-import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
@@ -16,24 +15,15 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { ToastHost } from '@/components/app';
 import { LaunchIntro } from '@/components/launch-intro';
 import { useApp } from '@/lib/store';
-import { extractUrl } from '@/lib/services/kitchen-ai';
+import { useShareInbox } from '@/lib/use-share-inbox';
 import { ThemeProvider, themeVariables, useTheme } from '@/lib/theme-context';
 
 export const unstable_settings = { initialRouteName: '(tabs)' };
 SplashScreen.preventAutoHideAsync().catch(() => {});
 const queryClient = new QueryClient();
 
-/** Opens the import flow when a TikTok/Instagram/etc. link is shared into the app from another app. */
-function ShareIntentRouter() {
-  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
-  useEffect(() => {
-    if (!hasShareIntent) return;
-    const url = shareIntent.webUrl ?? extractUrl(shareIntent.text ?? '');
-    resetShareIntent();
-    if (!url) return;
-    const t = setTimeout(() => router.push({ pathname: '/import-loading', params: { kind: 'link', url } }), 250);
-    return () => clearTimeout(t);
-  }, [hasShareIntent, shareIntent, resetShareIntent]);
+function ShareInboxListener() {
+  useShareInbox();
   return null;
 }
 
@@ -85,7 +75,7 @@ function ThemedRoot() {
         <KeyboardProvider>
           <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={C.cream} />
           <RootLayoutNav />
-          <ShareIntentRouter />
+          <ShareInboxListener />
           <ToastHost />
           {introDone ? null : <LaunchIntro onReady={onIntroReady} onComplete={onIntroComplete} />}
         </KeyboardProvider>
@@ -99,10 +89,8 @@ export default function RootLayout() {
   const hydrated = useApp((s) => s.hydrated);
   if (!(fontsLoaded || !!fontError) || !hydrated) return null;
   return (
-    <ShareIntentProvider>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider><ThemedRoot /></ThemeProvider>
-      </QueryClientProvider>
-    </ShareIntentProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider><ThemedRoot /></ThemeProvider>
+    </QueryClientProvider>
   );
 }

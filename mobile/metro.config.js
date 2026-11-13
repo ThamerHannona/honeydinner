@@ -4,6 +4,7 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 const { withVibecodeMetro } = require("@vibecodeapp/sdk/metro");
+const { withShareExtension } = require("expo-share-extension/metro");
 const path = require("path");
 const fs = require("fs");
 
@@ -158,4 +159,5 @@ config.resolver = {
 };
 
 // Integrate NativeWind with the Metro configuration.
-module.exports = withNativeWind(withVibecodeMetro(config), { input: "./global.css" });
+// withShareExtension serves index.share.js to the iOS share extension in development.
+module.exports = withShareExtension(withNativeWind(withVibecodeMetro(config), { input: "./global.css" }));
