@@ -48,6 +48,7 @@ interface AppState {
   saveRecipe: (d: RecipeDraft, imported: boolean) => string;
   toggleSaved: (id: string) => void;
   deleteRecipe: (id: string) => void;
+  setStepImage: (id: string, index: number, url: string) => void;
 
   addToGroceries: (ingredients: Ingredient[], recipeId: string | null) => number;
   addGrocery: (name: string) => void;
@@ -134,6 +135,15 @@ export const useApp = create<AppState>()(
       toggleSaved: (id) =>
         set((s) => ({ recipes: s.recipes.map((r) => (r.id === id ? { ...r, saved: !r.saved } : r)) })),
       deleteRecipe: (id) => set((s) => ({ recipes: s.recipes.filter((r) => r.id !== id) })),
+      setStepImage: (id, index, url) =>
+        set((s) => ({
+          recipes: s.recipes.map((r) => {
+            if (r.id !== id) return r;
+            const imgs = [...(r.stepImages ?? r.steps.map(() => null))];
+            imgs[index] = url;
+            return { ...r, stepImages: imgs };
+          }),
+        })),
 
       addToGroceries: (ingredients, recipeId) => {
         let added = 0;

@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.shakeandbakelabs.honeydinner",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Honey, Dinner? uses the camera to scan your fridge, receipts and cookbook pages.",
@@ -66,6 +66,13 @@
           "androidIntentFilters": [
             "text/*"
           ]
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Honey, Dinner? listens for \u201cnext\u201d, \u201cback\u201d and \u201cstart timer\u201d so you can cook hands-free.",
+          "speechRecognitionPermission": "Honey, Dinner? understands voice commands like \u201cnext step\u201d while you cook."
         }
       ]
     ],

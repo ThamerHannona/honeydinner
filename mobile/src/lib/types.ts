@@ -45,6 +45,8 @@ export interface Recipe {
   source: RecipeSource;
   /** Set by the importer when it had to fill gaps the post didn't state (e.g. amounts). */
   note?: string;
+  /** Illustrations for each step, filled in lazily by cooking mode. */
+  stepImages?: (string | null)[];
   saved: boolean;
   importedAt: string | null;
   createdAt: string;

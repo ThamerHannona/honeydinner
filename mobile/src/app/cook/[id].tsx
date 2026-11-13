@@ -7,7 +7,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, SlideInLeft, SlideInRight, useAnimatedStyle, withTiming, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import { ChevronLeft, Pause, Play, RotateCcw, Sun, Timer, X } from 'lucide-react-native';
+import { ChevronLeft, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { useCookVoice, type VoiceCommand } from '@/lib/cook-voice';
+import { useStepImages } from '@/lib/services/step-images';
 import { GenieAvatar } from '@/components/brand';
 import { Button, PressableScale, Txt, AView } from '@/components/ui';
 import { findTimerMinutes } from '@/lib/kitchen';
@@ -41,6 +44,35 @@ export default function CookMode() {
     setIdx(Math.max(0, Math.min(total, n)));
   };
 
+  // Voice: read each step aloud, and act on spoken commands while hands-free is on.
+  const [timerCmd, setTimerCmd] = useState<{ kind: 'start' | 'stop'; n: number } | null>(null);
+  const stepLine = (i: number) => {
+    const text = steps[i] ?? '';
+    const mins = findTimerMinutes(text);
+    return `Step ${i + 1}. ${text}${mins && voice.listening ? ` Say "start timer" for a ${mins} minute timer.` : ''}`;
+  };
+  const voice = useCookVoice({
+    onCommand: (cmd: VoiceCommand) => {
+      haptic.tap();
+      if (cmd === 'next') go(idx + 1);
+      else if (cmd === 'back') go(idx - 1);
+      else if (cmd === 'repeat') voice.say(done ? 'Dinner is served.' : stepLine(idx));
+      else if (cmd === 'timer-start') setTimerCmd({ kind: 'start', n: Date.now() });
+      else if (cmd === 'timer-stop') setTimerCmd({ kind: 'stop', n: Date.now() });
+      else if (cmd === 'ingredients') {
+        const list = (recipe?.ingredients ?? []).map((i) => `${i.qty ?? ''} ${i.unit} ${i.name}`.replace(/\s+/g, ' ').trim());
+        voice.say(list.length ? `You'll need: ${list.join(', ')}.` : 'No ingredients listed.');
+      }
+    },
+  });
+  useEffect(() => {
+    if (!recipe) return;
+    voice.say(done ? 'Dinner is served. Enjoy!' : stepLine(idx));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, done, voice.speakOn]);
+  useStepImages(recipe, idx);
+  const stepImage = recipe?.stepImages?.[idx] ?? null;
+
   const bar = useAnimatedStyle(() => ({ width: withTiming(`${(Math.min(idx + 1, total) / Math.max(total, 1)) * 100}%`, { duration: reduceMotion ? 0 : 300 }) }));
 
   if (!recipe) return null;
@@ -55,13 +87,34 @@ export default function CookMode() {
               <X size={22} color={C.onInk} />
             </View>
           </PressableScale>
-          <View className="flex-row items-center rounded-full px-3 py-1.5" style={{ gap: 6, backgroundColor: C.timerTrack }}>
-            <Sun size={14} color={C.honey} />
-            <Txt weight="bold" className="text-[12px]" style={{ color: C.onInk + 'cc' }}>
-              Screen stays awake
+          <View className="flex-row items-center rounded-full px-3 py-1.5" style={{ gap: 6, backgroundColor: voice.listening ? C.honey : C.timerTrack }} testID="cook-voice-status">
+            {voice.listening ? <Mic size={14} color={C.onHoney} /> : <Sun size={14} color={C.honey} />}
+            <Txt weight="bold" className="text-[12px]" style={{ color: voice.listening ? C.onHoney : C.onInk + 'cc' }}>
+              {voice.listening ? 'Say “next” or “back”' : 'Screen stays awake'}
             </Txt>
           </View>
-          <View className="h-11 w-11" />
+          <View className="flex-row" style={{ gap: 8 }}>
+            <PressableScale
+              testID="cook-voice-toggle"
+              accessibilityLabel={voice.speakOn ? 'Mute read-aloud' : 'Read steps aloud'}
+              onPress={() => voice.setSpeakOn(!voice.speakOn)}>
+              <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.timerTrack }}>
+                {voice.speakOn ? <Volume2 size={20} color={C.onInk} /> : <VolumeX size={20} color={C.onInk + '99'} />}
+              </View>
+            </PressableScale>
+            <PressableScale
+              testID="cook-handsfree-toggle"
+              accessibilityLabel={voice.listening ? 'Turn off hands-free' : 'Turn on hands-free voice commands'}
+              onPress={async () => {
+                const on = await voice.toggleListening();
+                if (on) toast('Hands-free on: say “next”, “back”, “repeat” or “start timer”.');
+                else if (!voice.listening) toast('Hands-free needs microphone and speech access in Settings.');
+              }}>
+              <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: voice.listening ? C.honey : C.timerTrack }}>
+                {voice.listening ? <Mic size={20} color={C.onHoney} /> : <MicOff size={20} color={C.onInk} />}
+              </View>
+            </PressableScale>
+          </View>
         </View>
         <View className="mt-4 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: C.timerTrack }}>
           <Animated.View style={[{ height: '100%', backgroundColor: C.honey, borderRadius: 4 }, bar]} />
@@ -84,13 +137,27 @@ export default function CookMode() {
           </AView>
         ) : (
           <Animated.View key={idx} entering={reduceMotion ? undefined : (dir === 1 ? SlideInRight : SlideInLeft).duration(260)}>
+            <View className="mb-5 overflow-hidden rounded-3xl" style={{ aspectRatio: 16 / 10, backgroundColor: C.timerTrack }} testID="cook-step-image">
+              {stepImage ? (
+                <Image source={{ uri: stepImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={250} accessibilityLabel={`Illustration of step ${idx + 1}`} />
+              ) : (
+                <View className="flex-1 items-center justify-center">
+                  <Txt weight="bold" className="text-[13px]" style={{ color: C.onInk + '80' }}>FridgeGenie is sketching this step…</Txt>
+                </View>
+              )}
+              {stepImage ? (
+                <View className="absolute right-3 top-3 rounded-full px-2.5 py-1" style={{ backgroundColor: '#00000080' }}>
+                  <Txt label weight="extrabold" className="text-[11px] uppercase tracking-widest" style={{ color: C.onInk }}>Illustration</Txt>
+                </View>
+              ) : null}
+            </View>
             <Txt display weight="extrabold" className="text-[64px] leading-[68px] text-honey">
               {idx + 1}
             </Txt>
             <Txt display weight="semibold" className="mt-2 text-[30px] leading-[40px]" testID="cook-step-text" style={{ color: C.onInk }}>
               {steps[idx]}
             </Txt>
-            <StepTimer key={`t-${idx}`} minutes={findTimerMinutes(steps[idx] ?? '')} />
+            <StepTimer key={`t-${idx}`} minutes={findTimerMinutes(steps[idx] ?? '')} command={timerCmd} onDone={() => voice.say("Ding! Timer's done.")} />
           </Animated.View>
         )}
       </ScrollView>
@@ -133,12 +200,24 @@ export default function CookMode() {
 const R = 30;
 const CIRC = 2 * Math.PI * R;
 
-function StepTimer({ minutes }: { minutes: number | null }) {
+function StepTimer({ minutes, command, onDone }: { minutes: number | null; command: { kind: 'start' | 'stop'; n: number } | null; onDone: () => void }) {
   const { C } = useTheme();
   const reduceMotion = useReducedMotion();
   const totalSec = useMemo(() => (minutes ?? 0) * 60, [minutes]);
   const [left, setLeft] = useState<number>(totalSec);
   const [running, setRunning] = useState<boolean>(false);
+  const seenCmd = React.useRef<number | null>(command?.n ?? null);
+  const onDoneRef = React.useRef(onDone);
+  onDoneRef.current = onDone;
+  useEffect(() => {
+    if (!command || command.n === seenCmd.current || !totalSec) return;
+    seenCmd.current = command.n;
+    if (command.kind === 'start') {
+      setLeft((l) => (l === 0 ? totalSec : l));
+      setRunning(true);
+      toast(`${minutes} min timer started.`);
+    } else setRunning(false);
+  }, [command, totalSec, minutes]);
 
   useEffect(() => {
     if (!running) return;
@@ -148,6 +227,7 @@ function StepTimer({ minutes }: { minutes: number | null }) {
           setRunning(false);
           haptic.success();
           toast("Ding! Timer's done.");
+          onDoneRef.current();
           return 0;
         }
         return l - 1;
