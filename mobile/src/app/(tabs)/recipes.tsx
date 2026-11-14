@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { Search, X } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/app';
 import { IconButton, PressableScale, Txt } from '@/components/ui';
+import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { matchRecipe } from '@/lib/kitchen';
 import { useApp } from '@/lib/store';
 
@@ -124,7 +125,8 @@ export default function RecipesScreen() {
         </View>
         {visible.length === 0 ? (
           <View testID="recipes-empty-state" className="px-5 py-10">
-            <Txt display weight="bold" style={{ fontSize: 25 }}>{recipes.length ? 'Nothing quite matches.' : 'Your next keeper awaits.'}</Txt>
+            <AnimatedFridgeGenie size={88} mood="idle" testID="recipes-empty-genie" />
+            <Txt display weight="bold" style={{ fontSize: 25, marginTop: 12 }}>{recipes.length ? 'Nothing quite matches.' : 'Your next keeper awaits.'}</Txt>
             <Txt className="mt-2" style={{ color: C.inkSoft }}>{recipes.length ? 'Try another source, ingredient or filter.' : 'Add a recipe with the + button to start your collection.'}</Txt>
           </View>
         ) : null}

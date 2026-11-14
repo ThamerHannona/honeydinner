@@ -33,8 +33,11 @@ export default function ScanReview() {
     haptic.success();
     addDetectedItems(valid);
     toast(`${valid.length} items stocked. Your Pantry thanks you!`);
+    const counts: Record<StorageLocation, number> = { fridge: 0, freezer: 0, pantry: 0 };
+    for (const item of valid) counts[item.location] += 1;
+    const location = (['fridge', 'pantry', 'freezer'] as StorageLocation[]).sort((a, b) => counts[b] - counts[a])[0];
     router.dismissAll();
-    router.navigate('/pantry');
+    router.navigate({ pathname: '/pantry', params: { location, stocked: String(Date.now()) } });
   };
 
   return (

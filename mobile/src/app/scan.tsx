@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, X } from 'lucide-react-native';
+import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { Button, PressableScale, Txt, Skeleton } from '@/components/ui';
 import { ScanSweep } from '@/components/signature-motion';
 import { scanFridge, scanReceipt, type ScanPhoto } from '@/lib/services/kitchen-ai';
@@ -64,7 +65,7 @@ export default function ScanScreen() {
       <Txt display weight="bold" className="mb-4 text-[30px] leading-[35px]" style={{ letterSpacing: -0.7 }}>{isReceipt ? 'Scan your shopping.' : 'Point at your fridge.'}</Txt>
       <View className="overflow-hidden rounded-[28px] bg-cream-deep" style={{ height: 425, flexShrink: 1 }} testID="scan-camera-frame">
         {granted ? <Pressable testID="scan-capture" accessibilityRole="button" accessibilityLabel="Take photo" disabled={scan.isPending} onPress={() => void capturePhoto()} style={{ flex: 1 }}><CameraView ref={camRef} style={{ flex: 1 }} facing="back" /></Pressable> : <View className="flex-1 items-center justify-center px-9" style={{ gap: 14 }}><Camera size={36} color={C.inkSoft} /><Txt weight="semibold" className="text-center text-[15px] leading-[23px] text-ink-soft">{Platform.OS === 'web' ? 'Camera capture is available in the phone app.' : 'Allow the camera to frame your fridge or receipt.'}</Txt>{Platform.OS !== 'web' ? <Button testID="scan-allow-camera" variant="outline" label="Allow camera" onPress={() => requestPermission()} /> : null}</View>}
-        {scan.isPending ? <View pointerEvents="none" accessibilityState={{ busy: true }} accessibilityLabel="Preparing scanned items" testID="scan-loading" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}><ScanSweep /><View style={{ position: 'absolute', bottom: 24, left: 24, right: 24, gap: 10 }}>
+        {scan.isPending ? <View pointerEvents="none" accessibilityState={{ busy: true }} accessibilityLabel="Preparing scanned items" testID="scan-loading" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}><ScanSweep /><View style={{ position: 'absolute', top: 72, left: 0, right: 0, alignItems: 'center' }}><AnimatedFridgeGenie size={86} mood="working" testID="scan-genie" /></View><View style={{ position: 'absolute', bottom: 24, left: 24, right: 24, gap: 10 }}>
           {[0, 1, 2].map((index) => <View key={index} testID={`scan-item-placeholder-${index}`} style={{ padding: 10, borderRadius: 16, backgroundColor: C.paperOverlay, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Skeleton width={36} height={36} borderRadius={10} />
             <View style={{ flex: 1, gap: 6 }}><Skeleton width={index === 1 ? '65%' : '82%'} height={14} borderRadius={4} /><Skeleton width="40%" height={10} borderRadius={4} /></View>

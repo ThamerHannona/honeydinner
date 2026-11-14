@@ -1,11 +1,12 @@
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Camera, Check, ChevronRight, Plus, Search, Sparkles, X } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/app';
+import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { ListReveal, PressableScale, Txt, StatusDot } from '@/components/ui';
 import { expiryLabel, freshness, matchRecipe } from '@/lib/kitchen';
 import { filterPantry, PANTRY_LOCATIONS } from '@/lib/pantry';
@@ -23,7 +24,12 @@ export default function PantryScreen() {
   const recipes = useApp((s) => s.recipes);
   const markUsed = useApp((s) => s.markUsed);
   const restorePantryItem = useApp((s) => s.restorePantryItem);
+  const params = useLocalSearchParams<{ location?: string; stocked?: string }>();
   const [location, setLocation] = useState<StorageLocation>('fridge');
+  useEffect(() => {
+    const next = params.location;
+    if (next === 'fridge' || next === 'freezer' || next === 'pantry') setLocation(next);
+  }, [params.location, params.stocked]);
   const [query, setQuery] = useState<string>('');
   const [removed, setRemoved] = useState<PantryItem | null>(null);
   const items = useMemo(() => filterPantry(pantry, location, query), [pantry, location, query, revision]);
@@ -55,7 +61,7 @@ export default function PantryScreen() {
         </View>
       </View>
       {removed ? <View testID="pantry-used-up-banner" className="mx-5 mb-2 flex-row items-center rounded-xl bg-leaf-soft px-3" style={{ gap: 8 }} accessibilityLiveRegion="polite"><Check size={16} color={C.leafDark} /><Txt weight="bold" className="flex-1 text-[13px] text-leaf-dark">{removed.name} used up</Txt><PressableScale testID="pantry-undo" accessibilityRole="button" onPress={() => { restorePantryItem(removed); setRemoved(null); }} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><Txt weight="extrabold" className="text-[14px] text-leaf-dark">Undo</Txt></PressableScale></View> : null}
-      <FlatList testID="pantry-list" data={items} refreshing={refreshing} onRefresh={onRefresh} keyExtractor={(item) => item.id} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" ListEmptyComponent={<View testID="pantry-empty" className="items-center px-6 py-12"><Txt display weight="bold" className="text-center text-[23px]">{query.trim() ? 'No matching ingredients' : `Your ${location} is empty`}</Txt><Txt className="mt-2 text-center text-[15px] text-ink-soft">{query.trim() ? 'Try another search or choose a different location.' : 'Add an item to get your kitchen started.'}</Txt></View>} renderItem={({ item, index }) => {
+      <FlatList testID="pantry-list" data={items} refreshing={refreshing} onRefresh={onRefresh} keyExtractor={(item) => item.id} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" ListEmptyComponent={<View testID="pantry-empty" className="items-center px-6 py-12"><AnimatedFridgeGenie size={88} mood="idle" testID="pantry-empty-genie" /><Txt display weight="bold" className="mt-3 text-center text-[23px]">{query.trim() ? 'No matching ingredients' : `Your ${location} is empty`}</Txt><Txt className="mt-2 text-center text-[15px] text-ink-soft">{query.trim() ? 'Try another search or choose a different location.' : 'Add an item to get your kitchen started.'}</Txt></View>} renderItem={({ item, index }) => {
         const f = freshness(item.expiresAt);
         const color = f === 'expired' ? C.berry : f === 'soon' ? C.honeyDark : f === 'fresh' ? C.leafDark : C.inkSoft;
         return <ListReveal index={index}><ReanimatedSwipeable friction={2} rightThreshold={64} overshootRight={false} onSwipeableOpen={() => usedUp(item.id)} renderRightActions={() => <View className="w-24 items-center justify-center rounded-xl bg-leaf" style={{ gap: 3 }}><Check size={23} color={C.white} /><Txt weight="extrabold" className="text-[12px] text-white">Used up</Txt></View>}>

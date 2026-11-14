@@ -17,7 +17,9 @@ const ITEMS = [
   { name: 'groceries', title: 'List', testID: 'tab-groceries', Icon: List },
 ];
 
-const spring = { damping: 16, stiffness: 220, mass: 0.7 };
+const spring = { damping: 24, stiffness: 520, mass: 0.45, overshootClamping: true };
+const PRESS_SCALE = 1.18;
+const ACTIVE_SCALE = 1.06;
 
 function TabItem({
   item,
@@ -31,10 +33,11 @@ function TabItem({
   onLayout: (e: LayoutChangeEvent) => void;
 }) {
   const { C } = useTheme();
-  const scale = useSharedValue(active ? 1.12 : 1);
+  const pressed = useSharedValue(0);
+  const scale = useSharedValue(active ? ACTIVE_SCALE : 1);
   useEffect(() => {
-    scale.value = withSpring(active ? 1.12 : 1, spring);
-  }, [active, scale]);
+    if (!pressed.value) scale.value = withSpring(active ? ACTIVE_SCALE : 1, spring);
+  }, [active, pressed, scale]);
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <Pressable
@@ -43,14 +46,23 @@ function TabItem({
       accessibilityLabel={item.title}
       accessibilityState={{ selected: active }}
       className="flex-1 items-center justify-center"
-      style={{ minHeight: 44, gap: 3 }}
+      style={{ minHeight: 44 }}
+      onPressIn={() => {
+        haptic.select();
+        pressed.value = 1;
+        scale.value = withSpring(PRESS_SCALE, spring);
+      }}
+      onPressOut={() => {
+        pressed.value = 0;
+        scale.value = withSpring(active ? ACTIVE_SCALE : 1, spring);
+      }}
       onPress={onPress}
       onLayout={onLayout}
     >
-      <Animated.View style={iconStyle}>
+      <Animated.View style={[{ alignItems: 'center', gap: 3 }, iconStyle]}>
         <item.Icon size={22} strokeWidth={1.8} color={active ? C.ink : C.muted} fill={active ? C.honey : C.transparent} />
+        <Txt weight={active ? 'extrabold' : 'semibold'} style={{ fontSize: 11, color: active ? C.ink : C.muted }}>{item.title}</Txt>
       </Animated.View>
-      <Txt weight={active ? 'extrabold' : 'semibold'} style={{ fontSize: 11, color: active ? C.ink : C.muted }}>{item.title}</Txt>
     </Pressable>
   );
 }
@@ -110,7 +122,7 @@ function DinnerTabBar({ state, navigation }: BottomTabBarProps) {
               }}
               onPress={() => {
                 const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-                if (!active && !event.defaultPrevented) { haptic.select(); navigation.navigate(route.name, route.params); }
+                if (!active && !event.defaultPrevented) navigation.navigate(route.name, route.params);
               }}
             />
           </React.Fragment>
@@ -126,7 +138,7 @@ export default function TabLayout() {
   const onboarded = useApp((s) => s.onboarded);
   if (!onboarded) return <Redirect href="/onboarding" />;
   return (
-    <Tabs tabBar={(props) => <DinnerTabBar {...props} />} screenOptions={{ headerShown: false, animation: 'fade', sceneStyle: { backgroundColor: C.cream } }}>
+    <Tabs tabBar={(props) => <DinnerTabBar {...props} />} screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: C.cream } }}>
       <Tabs.Screen name="index" options={{ title: 'Tonight' }} />
       <Tabs.Screen name="recipes" options={{ title: 'Recipes' }} />
       <Tabs.Screen name="pantry" options={{ title: 'Kitchen' }} />

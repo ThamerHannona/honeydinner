@@ -11,7 +11,7 @@ import { ChevronLeft, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, 
 import { Image } from 'expo-image';
 import { useCookVoice, type VoiceCommand } from '@/lib/cook-voice';
 import { useStepImages } from '@/lib/services/step-images';
-import { GenieAvatar } from '@/components/brand';
+import { AnimatedFridgeGenie } from '@/components/brand';
 import { Button, PressableScale, Txt, AView } from '@/components/ui';
 import { findTimerMinutes } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
@@ -146,7 +146,7 @@ export default function CookMode() {
       <ScrollView testID="cook-step-content" style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }} showsVerticalScrollIndicator={false}>
         {done ? (
           <AView entering={reduceMotion ? undefined : ZoomIn.springify().damping(14)} className="items-center" testID="cook-done">
-            <GenieAvatar size={110} />
+            <AnimatedFridgeGenie size={110} mood="idle" testID="cook-done-genie" />
             <Txt display weight="extrabold" className="mt-6 text-center text-[36px] leading-[42px]" style={{ color: C.onInk }}>
               Dinner is served!
             </Txt>
@@ -161,7 +161,8 @@ export default function CookMode() {
               {stepImage ? (
                 <Image source={{ uri: stepImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={250} accessibilityLabel={`Illustration of step ${idx + 1}`} />
               ) : (
-                <View className="flex-1 items-center justify-center">
+                <View className="flex-1 items-center justify-center" style={{ gap: 8 }}>
+                  <AnimatedFridgeGenie size={72} mood="working" testID="cook-sketch-genie" />
                   <Txt weight="bold" className="text-[13px]" style={{ color: C.onInk + '80' }}>FridgeGenie is sketching this step…</Txt>
                 </View>
               )}

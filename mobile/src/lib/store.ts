@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { aisleToLocation, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, namesMatch } from './kitchen';
+import { aisleToLocation, checkOffBoughtGroceries, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, namesMatch } from './kitchen';
 import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS, starterRecipes } from './mock-data';
 import type {
   DetectedItem,
@@ -127,22 +127,25 @@ export const useApp = create<AppState>()(
       addPantryItem: (item) =>
         set((s) => ({ pantry: [{ ...item, id: uid('p'), addedAt: new Date().toISOString() }, ...s.pantry] })),
       addDetectedItems: (items) =>
-        set((s) => ({
-          pantry: [
-            ...items
-              .filter((i) => i.name.trim())
-              .map<PantryItem>((i) => ({
-                id: uid('p'),
-                name: i.name.trim(),
-                emoji: i.emoji || guessEmoji(i.name),
-                quantity: i.quantity,
-                location: i.location,
-                expiresAt: i.expiresInDays === null ? null : daysFromNow(i.expiresInDays),
-                addedAt: new Date().toISOString(),
-              })),
-            ...s.pantry,
-          ],
-        })),
+        set((s) => {
+          const now = new Date().toISOString();
+          const added = items
+            .filter((i) => i.name.trim())
+            .map<PantryItem>((i) => ({
+              id: uid('p'),
+              name: i.name.trim(),
+              emoji: i.emoji || guessEmoji(i.name),
+              quantity: i.quantity,
+              location: i.location,
+              expiresAt: i.expiresInDays === null ? null : daysFromNow(i.expiresInDays),
+              addedAt: now,
+            }));
+          return {
+            pantry: [...added, ...s.pantry],
+            groceries: checkOffBoughtGroceries(s.groceries, added.map((i) => i.name), now),
+            scanDraft: [],
+          };
+        }),
       markUsed: (id) => {
         const item = get().pantry.find((p) => p.id === id);
         set((s) => ({ pantry: s.pantry.filter((p) => p.id !== id) }));

@@ -228,7 +228,7 @@ async function scanWithVision(mode: 'receipt' | 'fridge', photo: ScanPhoto): Pro
     });
     const body = await res.json().catch(() => null) as { items?: unknown; error?: string } | null;
     if (!res.ok) throw new Error(body?.error || 'Couldn\'t read that photo');
-    const items = itemsFromResponse(body, mode === 'fridge' ? 'fridge' : 'fridge');
+    const items = itemsFromResponse(body, mode === 'receipt' ? 'pantry' : 'fridge');
     if (!items.length) throw new Error('No items found');
     return items;
   } finally {

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { PlatformBadge } from '@/components/brand';
+import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { Button, PressableScale, Txt, Highlight, Skeleton } from '@/components/ui';
 import { detectPlatform, IMPORT_STEPS, importRecipe, PLATFORM_LABEL, type ImportInput, type ImportStep } from '@/lib/services/kitchen-ai';
 import { useApp } from '@/lib/store';
@@ -50,6 +51,7 @@ export default function ImportLoading() {
           <View className="flex-row" style={{ gap: 10 }}><Skeleton width={68} height={14} borderRadius={4} /><Skeleton width={84} height={14} borderRadius={4} /></View>
         </View>
         <View className="mt-5 items-center">
+          <AnimatedFridgeGenie size={88} mood="working" testID="import-genie" />
           <View testID="import-loading-title" accessible accessibilityLabel="Reading the recipe…" className="flex-row flex-wrap items-center justify-center"><Txt display weight="bold" className="text-center text-[31px] leading-[37px]">Reading the </Txt><Highlight style={{ fontSize: 31, lineHeight: 37 }}>recipe…</Highlight></View>
           <Txt className="mt-2 text-center text-[14px] text-ink-soft">A clean recipe, ready for your kitchen.</Txt>
           <Txt testID="import-demo-notice" className="mt-2 text-center text-[11px] text-ink-soft">FridgeGenie is watching the video and writing it step by step.</Txt>

@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { Check, Plus } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/app';
 import { PressableScale, Txt, HardShadow } from '@/components/ui';
+import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { formatQty } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
 import { fonts, shape } from '@/lib/theme';
@@ -102,7 +103,8 @@ export default function GroceriesScreen() {
         })}
         {groceries.length === 0 ? (
           <View testID="groceries-empty-state" className="py-10">
-            <Txt display weight="bold" style={{ fontSize: 27 }}>A little room on the list.</Txt>
+            <AnimatedFridgeGenie size={88} mood="idle" testID="groceries-empty-genie" />
+            <Txt display weight="bold" style={{ fontSize: 27, marginTop: 12 }}>A little room on the list.</Txt>
             <Txt className="mt-2" style={{ color: C.inkSoft }}>Add an item above, or add missing ingredients from a recipe.</Txt>
           </View>
         ) : remaining === 0 ? (

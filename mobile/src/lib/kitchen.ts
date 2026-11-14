@@ -1,4 +1,4 @@
-import type { Aisle, Ingredient, PantryItem, Recipe, StorageLocation } from './types';
+import type { Aisle, GroceryItem, Ingredient, PantryItem, Recipe, StorageLocation } from './types';
 
 /* ---------- Names ---------- */
 
@@ -35,6 +35,18 @@ export const namesMatch = (a: string, b: string) => {
   const pad = (s: string) => ` ${s} `;
   return pad(na).includes(pad(nb)) || pad(nb).includes(pad(na));
 };
+
+/** Mark unchecked grocery rows that match any of the bought names. */
+export function checkOffBoughtGroceries(groceries: GroceryItem[], boughtNames: string[], now: string): GroceryItem[] {
+  const names = boughtNames.map((n) => n.trim()).filter(Boolean);
+  if (!names.length) return groceries;
+  return groceries.map((item) => {
+    if (item.checked) return item;
+    return names.some((name) => namesMatch(item.name, name))
+      ? { ...item, checked: true, checkedAt: now }
+      : item;
+  });
+}
 
 /* ---------- Expiry ---------- */
 
