@@ -163,6 +163,8 @@ export const blankDraft = (platform: SourcePlatform = 'web', url: string | null 
 /* Scanning                                                                    */
 /* -------------------------------------------------------------------------- */
 
+export type ScanPhoto = { uri: string; base64?: string | null };
+
 let did = 0;
 const d = (name: string, quantity: string, location: DetectedItem['location'], expiresInDays: number | null): DetectedItem => ({
   id: `d-${Date.now()}-${++did}`,
@@ -173,37 +175,80 @@ const d = (name: string, quantity: string, location: DetectedItem['location'], e
   expiresInDays,
 });
 
-/**
- * scanReceipt(photoUri)
- * Real: OCR the receipt (vision LLM), map line items like "ORG BBY SPIN 5OZ"
- * to friendly names, quantities and typical shelf life.
- */
-export async function scanReceipt(_photoUri: string | null): Promise<DetectedItem[]> {
-  await wait(2000);
-  return [
-    d('Avocados', '3', 'fridge', 4),
-    d('Broccoli', '1 head', 'fridge', 6),
-    d('Feta', '200 g', 'fridge', 14),
-    d('Limes', '4', 'fridge', 10),
-    d('Flour tortillas', '1 pack', 'pantry', 10),
-    d('Honey', '1 jar', 'pantry', null),
-    d('Chicken breast', '500 g', 'fridge', 2),
-    d('Frozen berries', '1 bag', 'freezer', 120),
-  ];
+async function readBase64(photo: ScanPhoto): Promise<string> {
+  const raw = photo.base64?.replace(/^data:[^,]+,/, '').replace(/\s+/g, '') ?? '';
+  if (raw.length > 80) return raw;
+  if (!photo.uri) throw new Error('No photo');
+  const FileSystem = await import('expo-file-system/legacy');
+  return FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 });
+}
+
+function itemsFromResponse(raw: unknown, fallback: DetectedItem['location']): DetectedItem[] {
+  const list = Array.isArray(raw) ? raw : (raw as { items?: unknown })?.items;
+  if (!Array.isArray(list)) return [];
+  const locs: DetectedItem['location'][] = ['fridge', 'freezer', 'pantry'];
+  const out: DetectedItem[] = [];
+  for (const row of list.slice(0, 40)) {
+    const r = row as Record<string, unknown>;
+    const name = String(r?.name ?? '').trim();
+    if (!name) continue;
+    const loc = String(r?.location ?? fallback) as DetectedItem['location'];
+    const exp = r?.expiresInDays;
+    const expiresInDays = exp === null || exp === undefined || exp === ''
+      ? null
+      : Math.max(0, Math.min(730, Math.round(Number(exp))));
+    out.push(d(
+      name,
+      String(r?.quantity ?? r?.qty ?? '1').trim() || '1',
+      locs.includes(loc) ? loc : fallback,
+      expiresInDays !== null && !Number.isFinite(expiresInDays) ? null : expiresInDays,
+    ));
+  }
+  return out;
+}
+
+async function scanWithVision(mode: 'receipt' | 'fridge', photo: ScanPhoto): Promise<DetectedItem[]> {
+  const image = await readBase64(photo);
+  if (!image) throw new Error('No photo');
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !anon) throw new Error('Not configured');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/scan-kitchen`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        apikey: anon,
+        authorization: `Bearer ${anon}`,
+      },
+      body: JSON.stringify({ mode, image }),
+      signal: ctrl.signal,
+    });
+    const body = await res.json().catch(() => null) as { items?: unknown; error?: string } | null;
+    if (!res.ok) throw new Error(body?.error || 'Couldn\'t read that photo');
+    const items = itemsFromResponse(body, mode === 'fridge' ? 'fridge' : 'fridge');
+    if (!items.length) throw new Error('No items found');
+    return items;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
- * scanFridge(photoUri)
- * Real: vision LLM identifies visible items and estimates freshness.
+ * scanReceipt(photo)
+ * OCR the receipt with a vision model, map line items like "ORG BBY SPIN 5OZ"
+ * to friendly names, quantities and typical shelf life.
  */
-export async function scanFridge(_photoUri: string | null): Promise<DetectedItem[]> {
-  await wait(2000);
-  return [
-    d('Carrots', '5', 'fridge', 12),
-    d('Mushrooms', '1 punnet', 'fridge', 3),
-    d('Orange juice', '1 L', 'fridge', 6),
-    d('Mozzarella', '1 ball', 'fridge', 5),
-    d('Cucumber', '1', 'fridge', 5),
-    d('Sour cream', '1 tub', 'fridge', 8),
-  ];
+export async function scanReceipt(photo: ScanPhoto): Promise<DetectedItem[]> {
+  return scanWithVision('receipt', photo);
+}
+
+/**
+ * scanFridge(photo)
+ * Vision model identifies visible items and estimates freshness.
+ */
+export async function scanFridge(photo: ScanPhoto): Promise<DetectedItem[]> {
+  return scanWithVision('fridge', photo);
 }

@@ -15,6 +15,7 @@ import { GenieAvatar } from '@/components/brand';
 import { Button, PressableScale, Txt, AView } from '@/components/ui';
 import { findTimerMinutes } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
+import { ingestInbox, whenHydrated } from '@/lib/use-share-inbox';
 import { haptic } from '@/lib/theme';
 
 const KEEP_AWAKE_TAG = 'cooking-mode';
@@ -31,6 +32,19 @@ export default function CookMode() {
   }, []);
   const params = useLocalSearchParams<{ id: string; servings?: string }>();
   const recipeId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const [inboxReady, setInboxReady] = useState(!recipeId);
+  useEffect(() => {
+    let cancelled = false;
+    whenHydrated(() => {
+      void (async () => {
+        if (recipeId && !useApp.getState().recipes.some((r) => r.id === recipeId)) {
+          await ingestInbox();
+        }
+        if (!cancelled) setInboxReady(true);
+      })();
+    });
+    return () => { cancelled = true; };
+  }, [recipeId]);
   const recipe = useApp((s) => s.recipes.find((r) => r.id === recipeId));
   const insets = useSafeAreaInsets();
   const [idx, setIdx] = useState<number>(0);
@@ -77,6 +91,9 @@ export default function CookMode() {
 
   const bar = useAnimatedStyle(() => ({ width: withTiming(`${(Math.min(idx + 1, total) / Math.max(total, 1)) * 100}%`, { duration: reduceMotion ? 0 : 300 }) }));
 
+  useEffect(() => {
+    if (inboxReady && recipeId && !recipe) router.replace('/');
+  }, [inboxReady, recipe, recipeId]);
   if (!recipe) return null;
 
   return (

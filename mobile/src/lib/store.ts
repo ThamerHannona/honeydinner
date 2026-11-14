@@ -153,7 +153,8 @@ export const useApp = create<AppState>()(
       setImportDraft: (d) => set({ importDraft: d }),
       setScanDraft: (d) => set({ scanDraft: d }),
       saveRecipe: (d, imported) => {
-        const id = uid('r');
+        const hinted = String((d as { id?: string }).id ?? '').trim();
+        const id = hinted || uid('r');
         const now = new Date().toISOString();
         const clean: Recipe = {
           ...d,

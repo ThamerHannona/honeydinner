@@ -1,14 +1,15 @@
 import { useTheme } from '@/lib/theme-context';
 import React, { useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, X } from 'lucide-react-native';
 import { Button, PressableScale, Txt, Skeleton } from '@/components/ui';
 import { ScanSweep } from '@/components/signature-motion';
-import { scanFridge, scanReceipt } from '@/lib/services/kitchen-ai';
+import { scanFridge, scanReceipt, type ScanPhoto } from '@/lib/services/kitchen-ai';
 import { useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
 
@@ -25,12 +26,33 @@ export default function ScanScreen() {
   const setScanDraft = useApp((s) => s.setScanDraft);
   const granted = permission?.granted && Platform.OS !== 'web';
   const scan = useMutation({
-    mutationFn: async () => {
-      const photo = granted ? await camRef.current?.takePictureAsync({ quality: 0.5, skipProcessing: true }) : null;
-      return isReceipt ? scanReceipt(photo?.uri ?? null) : scanFridge(photo?.uri ?? null);
-    },
+    mutationFn: async (photo: ScanPhoto) => isReceipt ? scanReceipt(photo) : scanFridge(photo),
     onSuccess: (items) => { haptic.success(); setScanDraft(items); router.replace({ pathname: '/scan-review', params: { mode } }); },
   });
+
+  const uploadPhoto = async () => {
+    if (scan.isPending) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      scan.mutate({ uri: '' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.65, base64: true });
+    if (result.canceled || !result.assets?.[0]) return;
+    haptic.medium();
+    scan.mutate({ uri: result.assets[0].uri, base64: result.assets[0].base64 });
+  };
+
+  const capturePhoto = async () => {
+    if (!granted || scan.isPending) return;
+    haptic.medium();
+    const photo = await camRef.current?.takePictureAsync({ quality: 0.65, base64: true, skipProcessing: true });
+    if (!photo?.uri) {
+      scan.mutate({ uri: '' });
+      return;
+    }
+    scan.mutate({ uri: photo.uri, base64: photo.base64 });
+  };
   return (
     <View className="flex-1 bg-cream px-5" style={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }} testID="scan-screen">
       <View className="mb-5 flex-row items-center" style={{ gap: 18 }}>
@@ -41,7 +63,7 @@ export default function ScanScreen() {
       </View>
       <Txt display weight="bold" className="mb-4 text-[30px] leading-[35px]" style={{ letterSpacing: -0.7 }}>{isReceipt ? 'Scan your shopping.' : 'Point at your fridge.'}</Txt>
       <View className="overflow-hidden rounded-[28px] bg-cream-deep" style={{ height: 425, flexShrink: 1 }} testID="scan-camera-frame">
-        {granted ? <CameraView ref={camRef} style={{ flex: 1 }} facing="back" /> : <View className="flex-1 items-center justify-center px-9" style={{ gap: 14 }}><Camera size={36} color={C.inkSoft} /><Txt weight="semibold" className="text-center text-[15px] leading-[23px] text-ink-soft">{Platform.OS === 'web' ? 'Camera capture is available in the phone app.' : 'Allow the camera to frame your fridge or receipt.'}</Txt>{Platform.OS !== 'web' ? <Button testID="scan-allow-camera" variant="outline" label="Allow camera" onPress={() => requestPermission()} /> : null}</View>}
+        {granted ? <Pressable testID="scan-capture" accessibilityRole="button" accessibilityLabel="Take photo" disabled={scan.isPending} onPress={() => void capturePhoto()} style={{ flex: 1 }}><CameraView ref={camRef} style={{ flex: 1 }} facing="back" /></Pressable> : <View className="flex-1 items-center justify-center px-9" style={{ gap: 14 }}><Camera size={36} color={C.inkSoft} /><Txt weight="semibold" className="text-center text-[15px] leading-[23px] text-ink-soft">{Platform.OS === 'web' ? 'Camera capture is available in the phone app.' : 'Allow the camera to frame your fridge or receipt.'}</Txt>{Platform.OS !== 'web' ? <Button testID="scan-allow-camera" variant="outline" label="Allow camera" onPress={() => requestPermission()} /> : null}</View>}
         {scan.isPending ? <View pointerEvents="none" accessibilityState={{ busy: true }} accessibilityLabel="Preparing scanned items" testID="scan-loading" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}><ScanSweep /><View style={{ position: 'absolute', bottom: 24, left: 24, right: 24, gap: 10 }}>
           {[0, 1, 2].map((index) => <View key={index} testID={`scan-item-placeholder-${index}`} style={{ padding: 10, borderRadius: 16, backgroundColor: C.paperOverlay, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Skeleton width={36} height={36} borderRadius={10} />
@@ -59,7 +81,7 @@ export default function ScanScreen() {
       <View className="py-4" testID="scan-hint"><Txt weight="bold" className="text-[14px]">{scan.isPending ? 'Looking at your kitchen…' : isReceipt ? 'Lay the receipt flat, top to bottom.' : 'Open the fridge and frame a shelf.'}</Txt><Txt className="mt-1 text-[12px] leading-[18px] text-ink-soft">Frame the shelf or receipt and we'll take it from here.</Txt></View>
       {scan.isError ? <Txt testID="scan-error" className="mb-3 text-[13px] text-berry">Couldn’t capture that photo. Please try again.</Txt> : null}
       <View className="flex-1" />
-      <Button testID="scan-shutter" label={scan.isPending ? 'Preparing items…' : 'Try sample scan'} loading={scan.isPending} onPress={() => { haptic.medium(); scan.mutate(); }} />
+      <Button testID="scan-shutter" label={scan.isPending ? 'Preparing items…' : 'Upload a photo'} loading={scan.isPending} onPress={() => { void uploadPhoto(); }} />
       <Txt className="mt-4 text-center text-[12px] text-ink-soft">Review every item before adding it to your kitchen.</Txt>
     </View>
   );

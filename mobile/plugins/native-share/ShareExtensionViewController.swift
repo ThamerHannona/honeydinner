@@ -33,6 +33,7 @@ class ShareExtensionViewController: UIViewController {
   private var savedTitle: String = ""
   private var failedMessage: String = "Couldn't read that one."
   private var currentURL: String?
+  private var queuedRecipeId: String?
 
   private let card = UIView()
   private let stack = UIStackView()
@@ -442,11 +443,15 @@ class ShareExtensionViewController: UIViewController {
     var pending = readInbox()
     var rec = recipe
     rec["sharedAt"] = ISO8601DateFormatter().string(from: Date())
+    if rec["id"] == nil {
+      rec["id"] = "r-\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString.prefix(6).lowercased())"
+    }
+    queuedRecipeId = rec["id"] as? String
     var recipes = pending["recipes"] as? [[String: Any]] ?? []
     recipes.append(rec)
     pending["recipes"] = recipes
     writeInbox(pending)
-    logExt("queued recipe")
+    logExt("queued recipe \(queuedRecipeId ?? "")")
   }
 
   private func queueLink(_ url: String) {
@@ -522,13 +527,23 @@ class ShareExtensionViewController: UIViewController {
 
   private func openHostAndDismiss() {
     var path = "shared"
-    if let url = currentURL,
-       let enc = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+    if phase == .saved, let id = queuedRecipeId, !id.isEmpty {
+      path = "cook/\(id)"
+    } else if let url = currentURL,
+              let enc = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
       path = "shared?url=\(enc)"
     }
     openHost(path) { [weak self] in
       self?.dismissExtension()
     }
+  }
+
+  // ObjC name of UIApplication.open(_:options:completionHandler:). We cannot
+  // reference the UIApplication type because the extension is built with
+  // APPLICATION_EXTENSION_API_ONLY = YES, so we bind the selector ourselves.
+  @objc private protocol HDApplicationOpenURL {
+    @objc(openURL:options:completionHandler:)
+    func open(_ url: URL, options: [AnyHashable: Any], completionHandler: ((Bool) -> Void)?)
   }
 
   private func openHost(_ path: String, done: @escaping () -> Void) {
@@ -538,34 +553,35 @@ class ShareExtensionViewController: UIViewController {
       return
     }
     logExt("openHost \(url.absoluteString)")
-    // APPLICATION_EXTENSION_API_ONLY is YES, so walk the responder chain for
-    // the one-argument openURL: used by UIApplication. Don't call
-    // completeRequest until the open has had a moment to fire — cancelling
-    // immediately can swallow the hand-off.
-    var opened = false
-    let selector = sel_registerName("openURL:")
-    var responder: UIResponder? = self
-    while let r = responder {
-      if r !== self, r.responds(to: selector) {
-        r.perform(selector, with: url)
-        opened = true
-        logExt("openURL: via \(type(of: r))")
-        break
-      }
-      responder = r.next
-    }
+    let selector = NSSelectorFromString("openURL:options:completionHandler:")
     var finished = false
     let finish = {
       guard !finished else { return }
       finished = true
       done()
     }
+    var opened = false
+    var responder: UIResponder? = self
+    while let r = responder {
+      if r !== self, r.responds(to: selector) {
+        let opener = unsafeBitCast(r, to: HDApplicationOpenURL.self)
+        opener.open(url, options: [:], completionHandler: { success in
+          self.logExt("openURL:options:completionHandler: \(success) via \(type(of: r))")
+          DispatchQueue.main.async(execute: finish)
+        })
+        opened = true
+        logExt("opened via responder \(type(of: r))")
+        break
+      }
+      responder = r.next
+    }
     if !opened {
       extensionContext?.open(url) { success in
         self.logExt("extensionContext.open \(success)")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: finish)
+        DispatchQueue.main.async(execute: finish)
       }
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + (opened ? 0.3 : 0.7), execute: finish)
+    // Never dismiss before the open has a chance to leave the extension.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: finish)
   }
 }
