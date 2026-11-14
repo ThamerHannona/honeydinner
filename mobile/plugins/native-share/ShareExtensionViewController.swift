@@ -43,8 +43,9 @@ class ShareExtensionViewController: UIViewController {
   private let stepsStack = UIStackView()
   private let noteWrap = UIView()
   private let noteLabel = UILabel()
-  private let primaryButton = UIButton(type: .system)
-  private let secondaryButton = UIButton(type: .system)
+  private let primaryButton = UIButton(type: .custom)
+  private let secondaryButton = UIButton(type: .custom)
+  private let actions = UIView()
 
   private var stepTimer: Timer?
   private var importTask: URLSessionDataTask?
@@ -59,7 +60,7 @@ class ShareExtensionViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    preferredContentSize = CGSize(width: UIScreen.main.bounds.width, height: 620)
+    preferredContentSize = CGSize(width: UIScreen.main.bounds.width, height: 520)
     logExt("viewDidLoad HD_NATIVE_SHARE_PANEL")
     startImport()
   }
@@ -80,11 +81,14 @@ class ShareExtensionViewController: UIViewController {
     card.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(card)
 
+    view.isUserInteractionEnabled = true
+    card.isUserInteractionEnabled = true
+
     NSLayoutConstraint.activate([
       card.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       card.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       card.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-      card.heightAnchor.constraint(greaterThanOrEqualToConstant: 420),
+      card.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
     ])
 
     grabber.backgroundColor = kLine
@@ -128,17 +132,30 @@ class ShareExtensionViewController: UIViewController {
     styleSecondary(secondaryButton)
     primaryButton.addTarget(self, action: #selector(primaryTapped), for: .touchUpInside)
     secondaryButton.addTarget(self, action: #selector(secondaryTapped), for: .touchUpInside)
+    primaryButton.isUserInteractionEnabled = true
+    secondaryButton.isUserInteractionEnabled = true
+    closeButton.isUserInteractionEnabled = true
 
     stack.axis = .vertical
     stack.spacing = 14
     stack.translatesAutoresizingMaskIntoConstraints = false
-    [logoLabel, statusLabel, stepsStack, noteWrap, secondaryButton, primaryButton].forEach { stack.addArrangedSubview($0) }
+    [logoLabel, statusLabel, stepsStack, noteWrap].forEach { stack.addArrangedSubview($0) }
     stack.setCustomSpacing(8, after: logoLabel)
     stack.setCustomSpacing(18, after: statusLabel)
+
+    let actionStack = UIStackView(arrangedSubviews: [secondaryButton, primaryButton])
+    actionStack.axis = .vertical
+    actionStack.spacing = 10
+    actionStack.isUserInteractionEnabled = true
+    actionStack.translatesAutoresizingMaskIntoConstraints = false
+    actions.isUserInteractionEnabled = true
+    actions.translatesAutoresizingMaskIntoConstraints = false
+    actions.addSubview(actionStack)
 
     card.addSubview(grabber)
     card.addSubview(closeButton)
     card.addSubview(stack)
+    card.addSubview(actions)
 
     NSLayoutConstraint.activate([
       grabber.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
@@ -152,9 +169,16 @@ class ShareExtensionViewController: UIViewController {
       stack.topAnchor.constraint(equalTo: grabber.bottomAnchor, constant: 22),
       stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
       stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
-      stack.bottomAnchor.constraint(equalTo: card.safeAreaLayoutGuide.bottomAnchor, constant: -18),
-      primaryButton.heightAnchor.constraint(equalToConstant: 54),
-      secondaryButton.heightAnchor.constraint(equalToConstant: 48),
+      actions.topAnchor.constraint(equalTo: stack.bottomAnchor, constant: 18),
+      actions.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
+      actions.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
+      actions.bottomAnchor.constraint(equalTo: card.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+      actionStack.topAnchor.constraint(equalTo: actions.topAnchor),
+      actionStack.leadingAnchor.constraint(equalTo: actions.leadingAnchor),
+      actionStack.trailingAnchor.constraint(equalTo: actions.trailingAnchor),
+      actionStack.bottomAnchor.constraint(equalTo: actions.bottomAnchor),
+      secondaryButton.heightAnchor.constraint(equalToConstant: 52),
+      primaryButton.heightAnchor.constraint(equalToConstant: 56),
     ])
 
     render()
@@ -163,17 +187,23 @@ class ShareExtensionViewController: UIViewController {
   private func stylePrimary(_ b: UIButton) {
     b.backgroundColor = kInk
     b.setTitleColor(kCream, for: .normal)
+    b.setTitleColor(kCream.withAlphaComponent(0.7), for: .highlighted)
     b.titleLabel?.font = roundedFont(size: 17, weight: .heavy)
-    b.layer.cornerRadius = 27
+    b.layer.cornerRadius = 28
+    b.clipsToBounds = true
+    b.contentEdgeInsets = UIEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
   }
 
   private func styleSecondary(_ b: UIButton) {
-    b.backgroundColor = .clear
+    b.backgroundColor = kWhite
     b.setTitleColor(kInk, for: .normal)
+    b.setTitleColor(kInk.withAlphaComponent(0.6), for: .highlighted)
     b.titleLabel?.font = roundedFont(size: 16, weight: .heavy)
-    b.layer.cornerRadius = 24
+    b.layer.cornerRadius = 26
     b.layer.borderWidth = 1
     b.layer.borderColor = kLine.cgColor
+    b.clipsToBounds = true
+    b.contentEdgeInsets = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
   }
 
   private func roundedFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
@@ -462,45 +492,80 @@ class ShareExtensionViewController: UIViewController {
 
   // MARK: - Actions
 
-  @objc private func closeTapped() { close() }
+  @objc private func closeTapped() {
+    logExt("close tapped")
+    dismissExtension()
+  }
 
   @objc private func primaryTapped() {
+    logExt("primary tapped \(String(describing: phase))")
     switch phase {
     case .reading, .nolink:
-      close()
-    case .saved:
-      openHost("shared")
-      close()
-    case .failed:
-      openHost("shared")
-      close()
+      dismissExtension()
+    case .saved, .failed:
+      openHostAndDismiss()
     }
   }
 
-  @objc private func secondaryTapped() { close() }
-
-  private func close() {
-    stepTimer?.invalidate()
-    extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+  @objc private func secondaryTapped() {
+    logExt("secondary tapped \(String(describing: phase))")
+    dismissExtension()
   }
 
-  private func openHost(_ path: String) {
+  private func dismissExtension() {
+    stepTimer?.invalidate()
+    logExt("completeRequest")
+    DispatchQueue.main.async {
+      self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+    }
+  }
+
+  private func openHostAndDismiss() {
+    var path = "shared"
+    if let url = currentURL,
+       let enc = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+      path = "shared?url=\(enc)"
+    }
+    openHost(path) { [weak self] in
+      self?.dismissExtension()
+    }
+  }
+
+  private func openHost(_ path: String, done: @escaping () -> Void) {
     let scheme = Bundle.main.object(forInfoDictionaryKey: "HostAppScheme") as? String ?? "honeydinner"
-    guard let url = URL(string: "\(scheme)://\(path)") else { return }
+    guard let url = URL(string: "\(scheme)://\(path)") else {
+      done()
+      return
+    }
     logExt("openHost \(url.absoluteString)")
-    // Open the host app without referencing UIApplication (the extension is built
-    // with APPLICATION_EXTENSION_API_ONLY = YES).
+    // APPLICATION_EXTENSION_API_ONLY is YES, so walk the responder chain for
+    // the one-argument openURL: used by UIApplication. Don't call
+    // completeRequest until the open has had a moment to fire — cancelling
+    // immediately can swallow the hand-off.
+    var opened = false
+    let selector = sel_registerName("openURL:")
     var responder: UIResponder? = self
-    let sel = NSSelectorFromString("openURL:options:completionHandler:")
     while let r = responder {
-      if r.responds(to: sel) {
-        typealias OpenFn = @convention(c) (Any, Selector, URL, NSDictionary, Any?) -> Void
-        let fn = unsafeBitCast(r.method(for: sel), to: OpenFn.self)
-        fn(r, sel, url, [:], nil)
-        return
+      if r !== self, r.responds(to: selector) {
+        r.perform(selector, with: url)
+        opened = true
+        logExt("openURL: via \(type(of: r))")
+        break
       }
       responder = r.next
     }
-    extensionContext?.open(url, completionHandler: nil)
+    var finished = false
+    let finish = {
+      guard !finished else { return }
+      finished = true
+      done()
+    }
+    if !opened {
+      extensionContext?.open(url) { success in
+        self.logExt("extensionContext.open \(success)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: finish)
+      }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + (opened ? 0.3 : 0.7), execute: finish)
   }
 }

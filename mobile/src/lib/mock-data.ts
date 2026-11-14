@@ -4,7 +4,7 @@ import type { GroceryItem, Member, PantryItem, Recipe } from './types';
 /** Single source of mock kitchen data. Dates are relative to the day of seeding.
  * Social links and creator handles are illustrative, not verified source posts.
  */
-export const MOCK_DATA_VERSION = 2;
+export const MOCK_DATA_VERSION = 3;
 export const ME_ID = 'm-me';
 export const PARTNER_ID = 'm-partner';
 
@@ -14,6 +14,16 @@ export const SEED_RECIPE_IDS = [
   'r-frittata', 'r-fajitas', 'r-chickpea-curry', 'r-beef-broccoli',
   'r-shakshuka', 'r-lemon-orzo', 'r-peanut-noodles', 'r-smash-tacos',
   'r-chicken-soup', 'r-meatballs',
+] as const;
+
+/** A short starter cookbook for a fresh kitchen — not a demo household. */
+export const STARTER_RECIPE_IDS = [
+  'r-garlic-chicken',
+  'r-tuscan-pasta',
+  'r-honey-salmon',
+  'r-chickpea-curry',
+  'r-smash-tacos',
+  'r-chicken-soup',
 ] as const;
 
 export const seedMembers: Member[] = [
@@ -479,9 +489,13 @@ export const seedGroceries = (): GroceryItem[] => {
 };
 
 /** Fresh empty kitchen used for new installs. Seed recipe/pantry helpers are unused. */
+export const starterRecipes = (): Recipe[] =>
+  seedRecipes().filter((r) => (STARTER_RECIPE_IDS as readonly string[]).includes(r.id));
+
+/** Fresh kitchen for new installs: one member, no demo pantry/list, a few starter recipes. */
 export const createMockData = () => ({
   members: seedMembers.map((member) => ({ ...member })),
   pantry: [] as PantryItem[],
-  recipes: [] as Recipe[],
+  recipes: starterRecipes(),
   groceries: [] as GroceryItem[],
 });

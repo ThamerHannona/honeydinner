@@ -14,8 +14,8 @@ export const whenHydrated = (fn: () => void) => {
   }
 };
 
-/** Moves everything from the share inbox into the app. Returns the id of the last recipe added. */
-export async function ingestInbox(): Promise<string | null> {
+/** Moves everything from the share inbox into the app. */
+export async function ingestInbox(): Promise<{ lastId: string | null; hasLink: boolean }> {
   const { recipes, links } = await drainInbox();
   const save = useApp.getState().saveRecipe;
   let lastId: string | null = null;
@@ -28,7 +28,7 @@ export async function ingestInbox(): Promise<string | null> {
   if (links.length) {
     setTimeout(() => router.push({ pathname: '/import-loading', params: { kind: 'link', url: links[0] } }), 300);
   }
-  return lastId;
+  return { lastId, hasLink: links.length > 0 };
 }
 
 export function useShareInbox() {

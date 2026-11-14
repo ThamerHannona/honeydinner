@@ -1,6 +1,6 @@
 // cook-speech — turns a cooking-step line into a warm spoken voice and caches
 // the MP3 in the public `cook-speech` Storage bucket.
-// Body: { text, voice?: "coral" | "nova" | "shimmer" }  →  { url, cached }
+// Body: { text, voice?: "coral" | "nova" | "shimmer", speed?: number }  →  { url, cached }
 // Secrets: OPENAI_API_KEY (required). SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // are provided by the edge runtime automatically.
 
@@ -16,18 +16,18 @@ const BUCKET = "cook-speech";
 const VOICES = new Set(["coral", "nova", "shimmer", "alloy", "echo", "fable", "onyx", "sage"]);
 const INSTRUCTIONS =
   "Speak warmly and naturally, like a calm friend talking you through a recipe in a cozy kitchen. " +
-  "Conversational pacing, not a robot or a newscaster. Keep it clear and encouraging.";
+  "Keep a normal, slightly brisk pace — clear and encouraging, not slow or dreamy.";
 
 async function sha(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
 }
 
-async function speak(text: string, voice: string, key: string): Promise<Uint8Array | null> {
+async function speak(text: string, voice: string, speed: number, key: string): Promise<Uint8Array | null> {
   const attempts: Record<string, unknown>[] = [
-    { model: "gpt-4o-mini-tts", voice, input: text, instructions: INSTRUCTIONS, response_format: "mp3" },
-    { model: "tts-1-hd", voice, input: text, response_format: "mp3" },
-    { model: "tts-1", voice, input: text, response_format: "mp3" },
+    { model: "gpt-4o-mini-tts", voice, input: text, instructions: INSTRUCTIONS, response_format: "mp3", speed },
+    { model: "tts-1-hd", voice, input: text, response_format: "mp3", speed },
+    { model: "tts-1", voice, input: text, response_format: "mp3", speed },
   ];
   for (const body of attempts) {
     const res = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -58,13 +58,15 @@ Deno.serve(async (req) => {
     if (!text) return json({ error: "Missing text" }, 400);
     const requested = String(body?.voice ?? "coral").toLowerCase();
     const voice = VOICES.has(requested) ? requested : "coral";
+    const speedRaw = Number((body as { speed?: unknown } | null)?.speed ?? 1.1);
+    const speed = Number.isFinite(speedRaw) ? Math.min(4, Math.max(0.25, speedRaw)) : 1.1;
 
-    const path = `${await sha(`v1|${voice}|${text}`)}.mp3`;
+    const path = `${await sha(`v2|${voice}|${speed}|${text}`)}.mp3`;
     const publicUrl = `${base}/storage/v1/object/public/${BUCKET}/${path}`;
     const head = await fetch(publicUrl, { method: "HEAD" }).catch(() => null);
     if (head?.ok) return json({ url: publicUrl, cached: true });
 
-    const bytes = await speak(text, voice, key);
+    const bytes = await speak(text, voice, speed, key);
     if (!bytes) return json({ error: "Couldn't speak this step" }, 502);
 
     const up = await fetch(`${base}/storage/v1/object/${BUCKET}/${path}`, {

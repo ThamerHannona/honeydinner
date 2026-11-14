@@ -28,7 +28,7 @@ export function matchCommand(text: string): VoiceCommand | null {
   return null;
 }
 
-const FALLBACK_RATE = 0.88;
+const FALLBACK_RATE = 0.52;
 const TTS_TIMEOUT_MS = 12000;
 let cachedVoiceId: string | undefined | null = null;
 let player: AudioPlayer | null = null;
@@ -86,7 +86,7 @@ async function fetchCookSpeech(text: string): Promise<string | null> {
         apikey: anon,
         authorization: `Bearer ${anon}`,
       },
-      body: JSON.stringify({ text, voice: 'coral' }),
+      body: JSON.stringify({ text, voice: 'coral', speed: 1.1 }),
       signal: ctrl.signal,
     });
     if (!res.ok) return null;

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { aisleToLocation, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, namesMatch } from './kitchen';
-import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS } from './mock-data';
+import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS, starterRecipes } from './mock-data';
 import type {
   DetectedItem,
   GroceryItem,
@@ -260,13 +260,16 @@ export const useApp = create<AppState>()(
     {
       name: 'honey-dinner-v1',
       version: MOCK_DATA_VERSION,
-      // v2: drop shipped demo recipes / pantry / groceries, keep the household and anything they added.
+      // v2: drop shipped demo recipes / pantry / groceries, keep the household.
+      // v3: if the kitchen has no recipes left, add a short starter cookbook.
       migrate: (persisted) => {
         const prev = (persisted ?? {}) as Partial<AppState>;
         const seedIds = new Set<string>(SEED_RECIPE_IDS);
+        let recipes = (prev.recipes ?? []).filter((r) => !seedIds.has(r.id));
+        if (recipes.length === 0) recipes = starterRecipes();
         return {
           ...prev,
-          recipes: (prev.recipes ?? []).filter((r) => !seedIds.has(r.id)),
+          recipes,
           pantry: (prev.pantry ?? []).filter((i) => !/^p-\d+$/.test(i.id)),
           groceries: (prev.groceries ?? []).filter((g) => !/^g-\d+$/.test(g.id)),
           members: prev.members?.length ? prev.members : seedState().members,
