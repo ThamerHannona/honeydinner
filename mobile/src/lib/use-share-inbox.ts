@@ -15,8 +15,8 @@ export const whenHydrated = (fn: () => void) => {
 };
 
 /** Moves everything from the share inbox into the app. Returns the id of the last recipe added. */
-export function ingestInbox(): string | null {
-  const { recipes, links } = drainInbox();
+export async function ingestInbox(): Promise<string | null> {
+  const { recipes, links } = await drainInbox();
   const save = useApp.getState().saveRecipe;
   let lastId: string | null = null;
   for (const { sharedAt: _sharedAt, ...draft } of recipes) lastId = save(draft, true);
@@ -33,9 +33,9 @@ export function ingestInbox(): string | null {
 
 export function useShareInbox() {
   useEffect(() => {
-    whenHydrated(() => ingestInbox());
+    whenHydrated(() => { void ingestInbox(); });
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') whenHydrated(() => ingestInbox());
+      if (s === 'active') whenHydrated(() => { void ingestInbox(); });
     });
     return () => sub.remove();
   }, []);

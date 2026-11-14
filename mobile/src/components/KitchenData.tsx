@@ -25,7 +25,7 @@ export function KitchenDataScreen({ title, screenId, subtitle, children }: {
       <ScrollView testID={`${screenId}-data`} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.inkSoft} />} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 110 }}>
         <View className="mb-5 flex-row items-center" style={{ gap: 8 }}>
           <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: C.honeySoft }}>
-            <Txt weight="extrabold" className="text-[11px] uppercase tracking-wider text-ink-soft">Demo kitchen</Txt>
+            <Txt weight="extrabold" className="text-[11px] uppercase tracking-wider text-ink-soft">Your kitchen</Txt>
           </View>
           <Txt weight="semibold" className="flex-1 text-[14px] text-ink-soft">{subtitle}</Txt>
         </View>

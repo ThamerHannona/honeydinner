@@ -4,13 +4,20 @@ import type { GroceryItem, Member, PantryItem, Recipe } from './types';
 /** Single source of mock kitchen data. Dates are relative to the day of seeding.
  * Social links and creator handles are illustrative, not verified source posts.
  */
-export const MOCK_DATA_VERSION = 1;
-export const ME_ID = 'm-alex';
-export const PARTNER_ID = 'm-lena';
+export const MOCK_DATA_VERSION = 2;
+export const ME_ID = 'm-me';
+export const PARTNER_ID = 'm-partner';
+
+/** Known seed recipe ids from earlier builds, stripped on migrate. */
+export const SEED_RECIPE_IDS = [
+  'r-garlic-chicken', 'r-tuscan-pasta', 'r-shrimp-rice', 'r-honey-salmon',
+  'r-frittata', 'r-fajitas', 'r-chickpea-curry', 'r-beef-broccoli',
+  'r-shakshuka', 'r-lemon-orzo', 'r-peanut-noodles', 'r-smash-tacos',
+  'r-chicken-soup', 'r-meatballs',
+] as const;
 
 export const seedMembers: Member[] = [
-  { id: ME_ID, name: 'Alex', initials: 'A', color: '#2E9E5B', isMe: true },
-  { id: PARTNER_ID, name: 'Lena', initials: 'L', color: '#F5B83D', isMe: false },
+  { id: ME_ID, name: 'You', initials: 'Y', color: '#2E9E5B', isMe: true },
 ];
 
 const img = (id: string) => `https://images.unsplash.com/${id}?w=900&q=80&auto=format&fit=crop`;
@@ -471,10 +478,10 @@ export const seedGroceries = (): GroceryItem[] => {
   ];
 };
 
-/** Fresh arrays on each call, shared by initial state and Reset demo data. */
+/** Fresh empty kitchen used for new installs. Seed recipe/pantry helpers are unused. */
 export const createMockData = () => ({
   members: seedMembers.map((member) => ({ ...member })),
-  pantry: seedPantry(),
-  recipes: seedRecipes(),
-  groceries: seedGroceries(),
+  pantry: [] as PantryItem[],
+  recipes: [] as Recipe[],
+  groceries: [] as GroceryItem[],
 });

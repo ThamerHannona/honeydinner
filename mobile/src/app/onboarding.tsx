@@ -1,13 +1,12 @@
 import { useTheme } from '@/lib/theme-context';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useAnimatedStyle, withSpring, useReducedMotion } from 'react-native-reanimated';
 import { Heart } from 'lucide-react-native';
 import { FridgeMascot, Illustration, Logo, PlatformBadge } from '@/components/brand';
 import { PressableScale, Txt, AView, Avatar, HardShadow, Highlight } from '@/components/ui';
-import { seedMembers } from '@/lib/mock-data';
 import { useApp } from '@/lib/store';
 
 
@@ -30,7 +29,7 @@ const SLIDES = [
 ];
 
 export default function Onboarding() {
-  const { C } = useTheme();
+  const { C, inputStyle } = useTheme();
   const reduceMotion = useReducedMotion();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -39,6 +38,7 @@ export default function Onboarding() {
   const [page, setPage] = useState<number>(0);
   const last = page === SLIDES.length - 1;
   const completeOnboarding = useApp((s) => s.completeOnboarding);
+  const [name, setName] = useState<string>('');
   const artScale = Math.min(1, Math.max(0.64, (height - insets.top - insets.bottom - 330) / 440));
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export default function Onboarding() {
   };
 
   const finish = () => {
-    completeOnboarding();
+    completeOnboarding(name.trim());
     router.replace('/');
   };
 
@@ -136,6 +136,20 @@ export default function Onboarding() {
             <Dot key={slide.key} active={index === page} index={index} />
           ))}
         </View>
+        {last ? (
+          <TextInput
+            testID="onboarding-name"
+            value={name}
+            onChangeText={setName}
+            placeholder="Your name"
+            placeholderTextColor={C.inkFaint}
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={finish}
+            style={[inputStyle, { height: 52, borderRadius: 16, paddingHorizontal: 16, marginBottom: 12, fontSize: 16 }]}
+          />
+        ) : null}
         <PressableScale testID="onboarding-next" onPress={next} accessibilityRole="button" accessibilityLabel={last ? 'Get started' : page === 0 ? 'Let’s eat' : 'Next'}>
           <HardShadow color={C.honey} radius={32}><View className="items-center justify-center" style={{ height: 58, borderRadius: 32, backgroundColor: C.ink }}>
             <Txt weight="extrabold" className="text-[17px]" style={{ color: C.cream }}>
@@ -149,7 +163,7 @@ export default function Onboarding() {
 }
 
 function Dot({ active, index }: { active: boolean; index: number }) {
-  const { C } = useTheme();
+  const { C, inputStyle } = useTheme();
   const reduceMotion = useReducedMotion();
   const style = useAnimatedStyle(() => ({ width: reduceMotion ? (active ? 23 : 8) : withSpring(active ? 23 : 8), backgroundColor: active ? C.ink : C.line }));
   return <Animated.View testID={`onboarding-dot-${index}`} style={[{ height: 8, borderRadius: 4 }, style]} />;
@@ -192,24 +206,24 @@ function VisualSave() {
 }
 
 function VisualTogether() {
-  const { C } = useTheme();
+  const { C, inputStyle } = useTheme();
   const reduceMotion = useReducedMotion();
   return (
     <View className="items-center" testID="onboarding-together-illustration">
       <View className="flex-row items-center" style={{ gap: 18 }}>
         <Animated.View entering={reduceMotion ? undefined : FadeInDown.delay(100).springify()}>
-          <Avatar member={seedMembers[0]} size={86} />
+          <Avatar member={{ id: 'you', name: 'You', initials: 'Y', color: '#2E9E5B', isMe: true }} size={86} />
         </Animated.View>
         <AView entering={reduceMotion ? undefined : FadeIn.delay(400)} className="h-14 w-14 items-center justify-center rounded-full bg-berry">
           <Heart size={28} color={C.onGreen} fill={C.onGreen} />
         </AView>
         <Animated.View entering={reduceMotion ? undefined : FadeInDown.delay(200).springify()}>
-          <Avatar member={seedMembers[1]} size={86} />
+          <Avatar member={{ id: 'partner', name: 'Partner', initials: 'P', color: '#F5B83D', isMe: false }} size={86} />
         </Animated.View>
       </View>
       <AView entering={reduceMotion ? undefined : FadeInDown.delay(500)} className="mt-6 rounded-2xl bg-leaf px-4 py-3">
         <Txt weight="extrabold" className="text-[15px]" style={{ color: C.onGreen }}>
-          Lena picked Garlic Butter Chicken!
+          They picked tonight's dinner!
         </Txt>
       </AView>
     </View>

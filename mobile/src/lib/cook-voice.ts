@@ -1,6 +1,10 @@
 // Hands-free cooking: reads each step aloud and listens for simple voice commands
 // ("next", "back", "repeat", "start timer", "stop timer", "ingredients").
+// Prefers a warm OpenAI voice via the cook-speech edge function and expo-audio,
+// and falls back to the best enhanced / premium iOS voice when offline.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { File, Paths } from 'expo-file-system';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import {
   ExpoSpeechRecognitionModule,
@@ -24,6 +28,122 @@ export function matchCommand(text: string): VoiceCommand | null {
   return null;
 }
 
+const FALLBACK_RATE = 0.88;
+const TTS_TIMEOUT_MS = 12000;
+let cachedVoiceId: string | undefined | null = null;
+let player: AudioPlayer | null = null;
+
+function hashText(text: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+function cacheFile(key: string): File {
+  return new File(Paths.cache, `cook-speech-${key}.mp3`);
+}
+
+async function cachedUri(key: string): Promise<string | null> {
+  try {
+    const f = cacheFile(key);
+    if (f.exists) return f.uri;
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function rememberAudio(key: string, url: string): Promise<string> {
+  try {
+    const f = cacheFile(key);
+    if (!f.exists) {
+      const res = await fetch(url);
+      if (!res.ok) return url;
+      const buf = new Uint8Array(await res.arrayBuffer());
+      f.write(buf);
+    }
+    return f.uri;
+  } catch {
+    return url;
+  }
+}
+
+async function fetchCookSpeech(text: string): Promise<string | null> {
+  const key = hashText(text.trim());
+  const hit = await cachedUri(key);
+  if (hit) return hit;
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !anon) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TTS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/cook-speech`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        apikey: anon,
+        authorization: `Bearer ${anon}`,
+      },
+      body: JSON.stringify({ text, voice: 'coral' }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => null) as { url?: string } | null;
+    if (!body?.url) return null;
+    return await rememberAudio(key, body.url);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function pickIosVoice(): Promise<string | undefined> {
+  if (cachedVoiceId !== null) return cachedVoiceId ?? undefined;
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    const en = voices.filter((v) => (v.language || '').toLowerCase().startsWith('en'));
+    const score = (v: Speech.Voice) => {
+      const q = String(v.quality ?? '').toLowerCase();
+      const n = `${v.name} ${v.identifier}`.toLowerCase();
+      let s = 0;
+      if (q.includes('premium') || n.includes('premium')) s += 5;
+      if (q.includes('enhanced') || n.includes('enhanced')) s += 3;
+      if (n.includes('siri') || n.includes('neural') || n.includes('premium')) s += 2;
+      if (v.language === 'en-US' || v.language === 'en-GB' || v.language === 'en-AU') s += 1;
+      if (/samantha|zoe|nicky|nora|ava|susan|karen|moira|tessa|allison|emily/.test(n)) s += 1;
+      return s;
+    };
+    en.sort((a, b) => score(b) - score(a));
+    cachedVoiceId = en[0]?.identifier ?? undefined;
+    return cachedVoiceId;
+  } catch {
+    cachedVoiceId = undefined;
+    return undefined;
+  }
+}
+
+function stopPlayer() {
+  try { player?.pause(); } catch { /* ignore */ }
+  try { player?.remove(); } catch { /* ignore */ }
+  player = null;
+}
+
+function fallbackSpeak(text: string, onDone: () => void) {
+  void pickIosVoice().then((voice) => {
+    Speech.speak(text, {
+      language: 'en-US',
+      rate: FALLBACK_RATE,
+      voice,
+      onDone,
+      onStopped: onDone,
+      onError: onDone,
+    });
+  });
+}
+
 type Options = {
   onCommand: (cmd: VoiceCommand) => void;
 };
@@ -36,6 +156,7 @@ export function useCookVoice({ onCommand }: Options) {
   const listeningRef = useRef<boolean>(false);
   const lastCmdAt = useRef<number>(0);
   const onCommandRef = useRef(onCommand);
+  const speakGen = useRef<number>(0);
   onCommandRef.current = onCommand;
 
   const startRecognizer = useCallback(() => {
@@ -56,20 +177,44 @@ export function useCookVoice({ onCommand }: Options) {
     }
   }, []);
 
+  const finishSpeak = useCallback((gen: number) => {
+    if (speakGen.current === gen) speakingRef.current = false;
+  }, []);
+
   const say = useCallback(
     (text: string) => {
+      const gen = ++speakGen.current;
       Speech.stop();
-      if (!speakOn || !text) return;
+      stopPlayer();
+      if (!speakOn || !text) {
+        speakingRef.current = false;
+        return;
+      }
       speakingRef.current = true;
-      Speech.speak(text, {
-        language: 'en-US',
-        rate: 0.98,
-        onDone: () => { speakingRef.current = false; },
-        onStopped: () => { speakingRef.current = false; },
-        onError: () => { speakingRef.current = false; },
-      });
+      void (async () => {
+        try {
+          await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false }).catch(() => undefined);
+          const uri = await fetchCookSpeech(text);
+          if (gen !== speakGen.current) return;
+          if (!uri) {
+            fallbackSpeak(text, () => finishSpeak(gen));
+            return;
+          }
+          const next = createAudioPlayer({ uri });
+          player = next;
+          const sub = next.addListener('playbackStatusUpdate', (status) => {
+            if (!status.didJustFinish) return;
+            try { sub.remove(); } catch { /* ignore */ }
+            finishSpeak(gen);
+          });
+          next.play();
+        } catch {
+          if (gen !== speakGen.current) return;
+          fallbackSpeak(text, () => finishSpeak(gen));
+        }
+      })();
     },
-    [speakOn],
+    [speakOn, finishSpeak],
   );
 
   useSpeechRecognitionEvent('result', (e) => {
@@ -117,7 +262,9 @@ export function useCookVoice({ onCommand }: Options) {
   useEffect(
     () => () => {
       listeningRef.current = false;
+      speakGen.current += 1;
       Speech.stop();
+      stopPlayer();
       try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
     },
     [],
@@ -125,7 +272,15 @@ export function useCookVoice({ onCommand }: Options) {
 
   return {
     speakOn,
-    setSpeakOn: (on: boolean) => { if (!on) Speech.stop(); setSpeakOn(on); },
+    setSpeakOn: (on: boolean) => {
+      if (!on) {
+        speakGen.current += 1;
+        Speech.stop();
+        stopPlayer();
+        speakingRef.current = false;
+      }
+      setSpeakOn(on);
+    },
     listening,
     toggleListening,
     heard,

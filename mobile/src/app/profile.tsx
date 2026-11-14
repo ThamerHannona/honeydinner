@@ -1,6 +1,6 @@
 import { useTheme } from '@/lib/theme-context';
 import React, { useState } from 'react';
-import { ScrollView, Switch, View } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, ChevronRight, LogOut, RotateCcw, UserPlus } from 'lucide-react-native';
@@ -8,23 +8,44 @@ import { SheetHeader } from '@/components/app';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow } from '@/components/ui';
 import { toast, useApp } from '@/lib/store';
+import { readShareExtensionLog } from '@/lib/share-inbox';
 import { haptic } from '@/lib/theme';
 
 export default function Profile() {
-  const { C } = useTheme();
+  const { C, inputStyle } = useTheme();
   const insets = useSafeAreaInsets();
   const members = useApp((s) => s.members);
   const pantryCount = useApp((s) => s.pantry.length);
   const recipeCount = useApp((s) => s.recipes.length);
-  const resetDemo = useApp((s) => s.resetDemo);
+  const renameMember = useApp((s) => s.renameMember);
+  const clearKitchen = useApp((s) => s.clearKitchen);
   const signOut = useApp((s) => s.signOut);
   const [expiryAlerts, setExpiryAlerts] = useState<boolean>(true);
   const [voteAlerts, setVoteAlerts] = useState<boolean>(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<string>('');
+  const [logOpen, setLogOpen] = useState<boolean>(false);
+  const [logText, setLogText] = useState<string>('');
+
+  const startEdit = (id: string, name: string) => {
+    haptic.select();
+    setEditingId(id);
+    setDraft(name);
+  };
+
+  const commitEdit = () => {
+    if (editingId) {
+      const next = draft.trim();
+      if (next) renameMember(editingId, next);
+    }
+    setEditingId(null);
+    Keyboard.dismiss();
+  };
 
   return (
     <View className="flex-1 bg-cream" testID="profile-screen">
       <SheetHeader title="Household" />
-      <ScrollView testID="profile-data" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(40, insets.bottom + 24) }}>
+      <ScrollView testID="profile-data" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(40, insets.bottom + 24) }} keyboardShouldPersistTaps="handled">
         <HardShadow radius={24}><View className="rounded-3xl bg-white p-5" >
           <View className="flex-row items-center" style={{ gap: 14 }}>
             <View className="flex-row">
@@ -50,16 +71,39 @@ export default function Profile() {
         </Txt>
         <View className="overflow-hidden rounded-2xl bg-white">
           {members.map((m, i) => (
-            <View key={m.id} className="min-h-[60px] flex-row items-center px-4" style={{ gap: 12, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
-              <Avatar member={m} size={36} />
-              <Txt weight="extrabold" className="flex-1 text-[16px]">
-                {m.name}
-                {m.isMe ? <Txt className="text-[14px] text-ink-faint"> (you)</Txt> : null}
-              </Txt>
-              <Txt weight="bold" className="text-[13px] text-ink-faint">
-                {m.isMe ? 'Owner' : 'Partner'}
-              </Txt>
-            </View>
+            <PressableScale
+              key={m.id}
+              testID={`profile-member-${m.id}`}
+              haptics={false}
+              onPress={() => (editingId === m.id ? commitEdit() : startEdit(m.id, m.name))}
+            >
+              <View className="min-h-[60px] flex-row items-center px-4" style={{ gap: 12, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+                <Avatar member={m} size={36} />
+                {editingId === m.id ? (
+                  <TextInput
+                    testID={`profile-rename-${m.id}`}
+                    value={draft}
+                    onChangeText={setDraft}
+                    autoFocus
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={commitEdit}
+                    onBlur={commitEdit}
+                    style={[inputStyle, { flex: 1, height: 40, paddingHorizontal: 10, borderRadius: 10, fontSize: 16 }]}
+                    accessibilityLabel={`Edit ${m.isMe ? 'your' : m.name + "'s"} name`}
+                  />
+                ) : (
+                  <Txt weight="extrabold" className="flex-1 text-[16px]">
+                    {m.name}
+                    {m.isMe ? <Txt className="text-[14px] text-ink-faint"> (you)</Txt> : null}
+                  </Txt>
+                )}
+                <Txt weight="bold" className="text-[13px] text-ink-faint">
+                  {m.isMe ? 'Owner' : 'Partner'}
+                </Txt>
+              </View>
+            </PressableScale>
           ))}
           <Row testID="profile-invite" icon={<UserPlus size={19} color={C.leafDark} />} label="Invite someone" tint={C.leafDark} onPress={() => router.push('/invite')} />
         </View>
@@ -84,11 +128,11 @@ export default function Profile() {
           <Row
             testID="profile-reset"
             icon={<RotateCcw size={19} color={C.ink} />}
-            label="Reset demo data"
+            label="Clear kitchen data"
             onPress={() => {
-              resetDemo();
+              clearKitchen();
               haptic.success();
-              toast('Fresh start! Demo kitchen restocked.');
+              toast('Kitchen cleared.');
             }}
             first
           />
@@ -107,11 +151,39 @@ export default function Profile() {
 
         <View className="mt-10 items-center">
           <Logo size="sm" />
-          <Txt weight="semibold" className="mt-2 text-[12px] text-ink-faint">
-            Version 1.0 · Made for hungry households
-          </Txt>
+          <Pressable
+            testID="profile-version"
+            delayLongPress={450}
+            onLongPress={async () => {
+              haptic.select();
+              const text = await readShareExtensionLog();
+              setLogText(text.trim() || 'No share-extension log yet.');
+              setLogOpen(true);
+            }}
+            accessibilityLabel="Version 1.0. Long press to open the share extension log."
+          >
+            <Txt weight="semibold" className="mt-2 text-[12px] text-ink-faint">
+              Version 1.0 · Made for hungry households
+            </Txt>
+          </Pressable>
         </View>
       </ScrollView>
+
+      <Modal visible={logOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setLogOpen(false)}>
+        <View className="flex-1 bg-cream" testID="share-extension-log" style={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }}>
+          <View className="flex-row items-center justify-between px-5 pb-3">
+            <Txt display weight="bold" className="text-[22px]">Share extension log</Txt>
+            <PressableScale testID="share-extension-log-close" onPress={() => setLogOpen(false)}>
+              <Txt weight="extrabold" className="text-[16px]">Close</Txt>
+            </PressableScale>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
+            <Txt className="text-[12px] leading-[18px]" style={{ color: C.inkSoft, fontFamily: 'Menlo' }} selectable>
+              {logText}
+            </Txt>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }

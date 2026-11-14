@@ -56,7 +56,7 @@ export default function ScanScreen() {
           { bottom: 24, right: 24, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 16 },
         ].map((corner, index) => <View key={index} pointerEvents="none" style={[{ position: 'absolute', width: 36, height: 36, borderColor: granted ? C.onInk : C.ink }, corner]} />)}
       </View>
-      <View className="py-4" testID="scan-hint"><Txt weight="bold" className="text-[14px]">{scan.isPending ? 'Preparing sample items…' : isReceipt ? 'Lay the receipt flat, top to bottom.' : 'Open the fridge and frame a shelf.'}</Txt><Txt className="mt-1 text-[12px] leading-[18px] text-ink-soft">Demo mode · recognition uses sample items for now.</Txt></View>
+      <View className="py-4" testID="scan-hint"><Txt weight="bold" className="text-[14px]">{scan.isPending ? 'Looking at your kitchen…' : isReceipt ? 'Lay the receipt flat, top to bottom.' : 'Open the fridge and frame a shelf.'}</Txt><Txt className="mt-1 text-[12px] leading-[18px] text-ink-soft">Frame the shelf or receipt and we'll take it from here.</Txt></View>
       {scan.isError ? <Txt testID="scan-error" className="mb-3 text-[13px] text-berry">Couldn’t capture that photo. Please try again.</Txt> : null}
       <View className="flex-1" />
       <Button testID="scan-shutter" label={scan.isPending ? 'Preparing items…' : 'Try sample scan'} loading={scan.isPending} onPress={() => { haptic.medium(); scan.mutate(); }} />

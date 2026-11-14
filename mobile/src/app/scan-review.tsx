@@ -39,7 +39,7 @@ export default function ScanReview() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1" testID="scan-review-screen" style={{ backgroundColor: C.cream }}>
-      <SheetHeader title={`${items.length} sample items`} subtitle="Demo scan · edit anything before adding." />
+      <SheetHeader title={`${items.length} items`} subtitle="Edit anything before adding." />
       <KeyboardAwareScrollView bottomOffset={16} testID="scan-review-form" style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}>
         <GenieBubble testID="scan-review-note" text="Here’s a sample. Keep only what’s really in your kitchen." />
         <View className="mt-4" style={{ gap: 8 }}>

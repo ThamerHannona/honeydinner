@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { aisleToLocation, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, namesMatch } from './kitchen';
-import { createMockData, ME_ID, MOCK_DATA_VERSION } from './mock-data';
+import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS } from './mock-data';
 import type {
   DetectedItem,
   GroceryItem,
@@ -31,10 +31,12 @@ interface AppState {
   importDraft: RecipeDraft | null;
   scanDraft: DetectedItem[];
 
-  completeOnboarding: () => void;
+  completeOnboarding: (name?: string) => void;
   signIn: () => void;
   signOut: () => void;
   invitePartner: (name: string) => void;
+  renameMember: (id: string, name: string) => void;
+  clearKitchen: () => void;
   resetDemo: () => void;
   setLastClipboard: (text: string) => void;
 
@@ -76,16 +78,50 @@ export const useApp = create<AppState>()(
       scanDraft: [],
       ...seedState(),
 
-      completeOnboarding: () => set({ onboarded: true }),
+      completeOnboarding: (name) =>
+        set((s) => {
+          const n = name?.trim();
+          if (!n) return { onboarded: true };
+          return {
+            onboarded: true,
+            members: s.members.map((m) =>
+              m.isMe ? { ...m, name: n, initials: n[0]!.toUpperCase() } : m,
+            ),
+          };
+        }),
       signIn: () => set({ signedIn: true }),
       signOut: () => set({ signedIn: false, onboarded: false }),
       invitePartner: (name) =>
-        set((s) => ({
-          members: s.members.map((m) =>
-            m.isMe ? m : { ...m, name: name.trim() || m.name, initials: (name.trim()[0] ?? m.initials).toUpperCase() },
-          ),
-        })),
-      resetDemo: () => set({ ...seedState(), importDraft: null, scanDraft: [] }),
+        set((s) => {
+          const n = name.trim();
+          if (!n) return {};
+          const existing = s.members.find((m) => !m.isMe);
+          if (existing) {
+            return {
+              members: s.members.map((m) =>
+                m.id === existing.id ? { ...m, name: n, initials: n[0]!.toUpperCase() } : m,
+              ),
+            };
+          }
+          return {
+            members: [
+              ...s.members,
+              { id: uid('m'), name: n, initials: n[0]!.toUpperCase(), color: '#F5B83D', isMe: false },
+            ],
+          };
+        }),
+      renameMember: (id, name) =>
+        set((s) => {
+          const n = name.trim();
+          if (!n) return {};
+          return {
+            members: s.members.map((m) =>
+              m.id === id ? { ...m, name: n, initials: n[0]!.toUpperCase() } : m,
+            ),
+          };
+        }),
+      clearKitchen: () => set({ pantry: [], recipes: [], groceries: [], vote: null, importDraft: null, scanDraft: [] }),
+      resetDemo: () => set({ pantry: [], recipes: [], groceries: [], vote: null, importDraft: null, scanDraft: [] }),
       setLastClipboard: (text) => set({ lastClipboard: text }),
 
       addPantryItem: (item) =>
@@ -173,7 +209,7 @@ export const useApp = create<AppState>()(
                 qty: ing.qty,
                 unit: ing.unit,
                 aisle: guessAisle(ing.name),
-                addedBy: ME_ID,
+                addedBy: get().members.find((m) => m.isMe)?.id ?? ME_ID,
                 recipeIds: recipeId ? [recipeId] : [],
                 checked: false,
                 checkedAt: null,
@@ -224,8 +260,18 @@ export const useApp = create<AppState>()(
     {
       name: 'honey-dinner-v1',
       version: MOCK_DATA_VERSION,
-      // Refresh the original demo seed once, preserving onboarding and other settings.
-      migrate: (persisted) => ({ ...(persisted as Partial<AppState>), ...seedState() }),
+      // v2: drop shipped demo recipes / pantry / groceries, keep the household and anything they added.
+      migrate: (persisted) => {
+        const prev = (persisted ?? {}) as Partial<AppState>;
+        const seedIds = new Set<string>(SEED_RECIPE_IDS);
+        return {
+          ...prev,
+          recipes: (prev.recipes ?? []).filter((r) => !seedIds.has(r.id)),
+          pantry: (prev.pantry ?? []).filter((i) => !/^p-\d+$/.test(i.id)),
+          groceries: (prev.groceries ?? []).filter((g) => !/^g-\d+$/.test(g.id)),
+          members: prev.members?.length ? prev.members : seedState().members,
+        };
+      },
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
         onboarded: s.onboarded,

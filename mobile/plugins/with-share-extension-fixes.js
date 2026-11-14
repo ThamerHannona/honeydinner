@@ -1,11 +1,15 @@
 // Fixes the iOS share extension in Expo SDK 54 / New Architecture:
 //
 // 1) After pod install, patch RCTThirdPartyComponentsProvider.mm so
-//    NSClassFromString nil entries cannot crash the extension on launch.
-// 2) Present a cream Honey, Dinner? panel immediately (before React Native
-//    starts) and write debug logs to the App Group, so a hang still shows UI
-//    and the next test has evidence.
-// 3) Strip UIApplicationSceneManifest from the extension Info.plist only.
+//    NSClassFromString nil entries cannot crash the main app (kept as a
+//    safety net; the extension itself no longer loads React Native).
+// 2) Replace the React-hosted ShareExtensionViewController with a pure
+//    UIKit panel (HD_NATIVE_SHARE_PANEL) that calls import-recipe itself,
+//    writes the App Group inbox + share-extension.log, and never starts RN.
+// 3) Remove use_react_native! / Expo modules from the extension Podfile
+//    target so React, Hermes, and ReactNativeDependencies are not linked.
+// 4) Strip UIApplicationSceneManifest from the extension Info.plist only
+//    and inject SupabaseUrl / SupabaseAnonKey for the import call.
 //
 // Listed BEFORE expo-share-extension in app.json so these mods run after it
 // writes the extension files. Does not touch the main app's UI or screens.
@@ -249,30 +253,143 @@ function patchSwift(file) {
   return true;
 }
 
+const NATIVE_MARK = 'HD_NATIVE_SHARE_PANEL';
+const NATIVE_SRC = path.join(__dirname, 'native-share', 'ShareExtensionViewController.swift');
+
+function slimExtensionPodfile(podfilePath) {
+  let src = fs.readFileSync(podfilePath, 'utf8');
+  if (src.includes('HD_NATIVE_SHARE_NO_RN')) return false;
+  const start = src.search(/target\s+'[^']*ShareExtension'\s+do/);
+  if (start < 0) {
+    console.warn(`[${TAG}] could not find ShareExtension Podfile target`);
+    return false;
+  }
+  const nameMatch = src.slice(start).match(/target\s+'([^']*ShareExtension)'/);
+  const name = nameMatch ? nameMatch[1] : 'HoneyDinnerShareExtension';
+  const after = src.slice(start);
+  const rn = after.search(/use_react_native!/);
+  let endRel = -1;
+  if (rn >= 0) {
+    const close = after.slice(rn).search(/\nend\b/);
+    if (close >= 0) endRel = rn + close + '\nend'.length;
+  }
+  if (endRel < 0) {
+    // Last resort: the final top-level end after this target.
+    const close = after.search(/\nend\s*$/);
+    if (close >= 0) endRel = close + '\nend'.length;
+  }
+  if (endRel < 0) {
+    console.warn(`[${TAG}] could not slim ShareExtension Podfile target`);
+    return false;
+  }
+  const slim = `target '${name}' do\n  # HD_NATIVE_SHARE_NO_RN\n  # Pure UIKit share panel: do not link React, Hermes, or Expo modules.\nend`;
+  src = src.slice(0, start) + slim + after.slice(endRel);
+  fs.writeFileSync(podfilePath, src);
+  return true;
+}
+
+function supabaseEnv(projectRoot) {
+  const fromEnv = {
+    url: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    key: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  };
+  if (fromEnv.url && fromEnv.key) return fromEnv;
+  try {
+    const eas = JSON.parse(fs.readFileSync(path.join(projectRoot, 'eas.json'), 'utf8'));
+    const env = (eas.build && eas.build.production && eas.build.production.env) || {};
+    return {
+      url: fromEnv.url || env.EXPO_PUBLIC_SUPABASE_URL || 'https://rzacuyrcbujcnkpoktyg.supabase.co',
+      key: fromEnv.key || env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+    };
+  } catch {
+    return { url: fromEnv.url || 'https://rzacuyrcbujcnkpoktyg.supabase.co', key: fromEnv.key || '' };
+  }
+}
+
+function xmlEscape(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function setPlistString(xml, key, value) {
+  const block = `  <key>${key}</key>\n  <string>${xmlEscape(value)}</string>\n`;
+  const re = new RegExp(`\\s*<key>${key}<\\/key>\\s*<string>[\\s\\S]*?<\\/string>`);
+  if (re.test(xml)) return xml.replace(re, `\n${block}`.replace(/\n$/, ''));
+  if (xml.includes('</dict>')) {
+    return xml.replace('</dict>', `${block}</dict>`);
+  }
+  return xml;
+}
+
+function injectExtensionKeys(root, projectRoot) {
+  const { url, key } = supabaseEnv(projectRoot);
+  if (!key) console.warn(`[${TAG}] SupabaseAnonKey missing; import-recipe will fail until EAS env is present`);
+  for (const dir of extensionDirs(root)) {
+    for (const file of ['Info.plist', 'ShareExtension-Info.plist']) {
+      const plist = path.join(root, dir, file);
+      if (!fs.existsSync(plist)) continue;
+      let xml = fs.readFileSync(plist, 'utf8');
+      xml = setPlistString(xml, 'SupabaseUrl', url);
+      xml = setPlistString(xml, 'SupabaseAnonKey', key);
+      fs.writeFileSync(plist, xml);
+    }
+  }
+}
+
+function installNativeShareController(root) {
+  if (!fs.existsSync(NATIVE_SRC)) {
+    throw new Error(`Native share controller missing: ${NATIVE_SRC}`);
+  }
+  const body = fs.readFileSync(NATIVE_SRC, 'utf8');
+  let wrote = 0;
+  for (const dir of extensionDirs(root)) {
+    const dest = path.join(root, dir, 'ShareExtensionViewController.swift');
+    fs.writeFileSync(dest, body);
+    wrote += 1;
+    console.log(`[${TAG}] installed native panel at ${dest}`);
+  }
+  return wrote;
+}
+
+
 module.exports = function withShareExtensionFixes(config) {
   config = withDangerousMod(config, [
     'ios',
     (cfg) => {
       const pod = path.join(cfg.modRequest.platformProjectRoot, 'Podfile');
-      if (fs.existsSync(pod)) patchPodfile(pod);
+      if (fs.existsSync(pod)) {
+        patchPodfile(pod);
+        slimExtensionPodfile(pod);
+      }
       return cfg;
     },
   ]);
 
   config = withXcodeProject(config, (cfg) => {
     const root = cfg.modRequest.platformProjectRoot;
-    for (const dir of extensionDirs(root)) {
-      const swift = path.join(root, dir, 'ShareExtensionViewController.swift');
-      if (fs.existsSync(swift)) {
-        const changed = patchSwift(swift);
-        console.log(`[${TAG}] ${swift}: ${changed ? 'patched' : 'already patched'}`);
+    const n = installNativeShareController(root);
+    const project = cfg.modResults;
+    const configs = project.pbxXCBuildConfigurationSection();
+    for (const key of Object.keys(configs)) {
+      const c = configs[key];
+      if (!c || !c.buildSettings) continue;
+      const bid = String(c.buildSettings.PRODUCT_BUNDLE_IDENTIFIER || '');
+      const pname = String(c.buildSettings.PRODUCT_NAME || '');
+      if (bid.includes('ShareExtension') || /ShareExtension/.test(pname)) {
+        c.buildSettings.APPLICATION_EXTENSION_API_ONLY = 'NO';
       }
     }
+    console.log(`[${TAG}] native share panel installed in ${n} target(s)`);
     return cfg;
   });
 
   config = withInfoPlist(config, (cfg) => {
-    patchExtensionPlist(cfg.modRequest.platformProjectRoot);
+    const root = cfg.modRequest.platformProjectRoot;
+    patchExtensionPlist(root);
+    injectExtensionKeys(root, cfg.modRequest.projectRoot);
     return cfg;
   });
 
