@@ -136,14 +136,20 @@ export const useApp = create<AppState>()(
         set((s) => ({ recipes: s.recipes.map((r) => (r.id === id ? { ...r, saved: !r.saved } : r)) })),
       deleteRecipe: (id) => set((s) => ({ recipes: s.recipes.filter((r) => r.id !== id) })),
       setStepImage: (id, index, url) =>
-        set((s) => ({
-          recipes: s.recipes.map((r) => {
-            if (r.id !== id) return r;
-            const imgs = [...(r.stepImages ?? r.steps.map(() => null))];
-            imgs[index] = url;
-            return { ...r, stepImages: imgs };
-          }),
-        })),
+        set((s) => {
+          const target = String(id);
+          return {
+            recipes: s.recipes.map((r) => {
+              if (String(r.id) !== target) return r;
+              const imgs = r.steps.map((_, i) => r.stepImages?.[i] ?? null);
+              if (index >= 0) {
+                while (imgs.length <= index) imgs.push(null);
+                imgs[index] = url;
+              }
+              return { ...r, stepImages: imgs };
+            }),
+          };
+        }),
 
       addToGroceries: (ingredients, recipeId) => {
         let added = 0;

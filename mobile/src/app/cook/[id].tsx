@@ -29,8 +29,9 @@ export default function CookMode() {
       Promise.resolve(deactivateKeepAwake(KEEP_AWAKE_TAG)).catch(() => {});
     };
   }, []);
-  const { id } = useLocalSearchParams<{ id: string; servings?: string }>();
-  const recipe = useApp((s) => s.recipes.find((r) => r.id === id));
+  const params = useLocalSearchParams<{ id: string; servings?: string }>();
+  const recipeId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const recipe = useApp((s) => s.recipes.find((r) => r.id === recipeId));
   const insets = useSafeAreaInsets();
   const [idx, setIdx] = useState<number>(0);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -70,8 +71,9 @@ export default function CookMode() {
     voice.say(done ? 'Dinner is served. Enjoy!' : stepLine(idx));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, done, voice.speakOn]);
-  useStepImages(recipe, idx);
-  const stepImage = recipe?.stepImages?.[idx] ?? null;
+  const stepImageState = useStepImages(recipe, idx);
+  const stepImage = stepImageState.url;
+  const hideStepImageBox = stepImageState.failed && !stepImage;
 
   const bar = useAnimatedStyle(() => ({ width: withTiming(`${(Math.min(idx + 1, total) / Math.max(total, 1)) * 100}%`, { duration: reduceMotion ? 0 : 300 }) }));
 
@@ -137,6 +139,7 @@ export default function CookMode() {
           </AView>
         ) : (
           <Animated.View key={idx} entering={reduceMotion ? undefined : (dir === 1 ? SlideInRight : SlideInLeft).duration(260)}>
+            {hideStepImageBox ? null : (
             <View className="mb-5 overflow-hidden rounded-3xl" style={{ aspectRatio: 16 / 10, backgroundColor: C.timerTrack }} testID="cook-step-image">
               {stepImage ? (
                 <Image source={{ uri: stepImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={250} accessibilityLabel={`Illustration of step ${idx + 1}`} />
@@ -151,6 +154,7 @@ export default function CookMode() {
                 </View>
               ) : null}
             </View>
+            )}
             <Txt display weight="extrabold" className="text-[64px] leading-[68px] text-honey">
               {idx + 1}
             </Txt>

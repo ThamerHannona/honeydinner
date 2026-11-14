@@ -24,7 +24,7 @@ function extensionDirs(root) {
 
 function patchPodfile(podfilePath) {
   let src = fs.readFileSync(podfilePath, 'utf8');
-  if (src.includes(POD_TAG)) return false;
+  if (src.includes('HD_SHARE_EXT_NIL_SAFE_GENSPECS')) return false;
   const snippet = `
     ${POD_TAG}
     codegen_patch = File.expand_path('../plugins/patch-rct-third-party-components.js', __dir__)
@@ -32,8 +32,25 @@ function patchPodfile(podfilePath) {
       puts "[ShareExtension] Patching RCTThirdPartyComponentsProvider.mm for nil-safety"
       system('node', codegen_patch, __dir__) || Pod::UI.warn('Share extension codegen patch failed')
     end
+    # Xcode's [CP-User] Generate Specs regenerates the provider after pod
+    # install and would compile the unpatched nil-crashing dictionary.
+    installer.pods_project.targets.each do |target|
+      target.build_phases.each do |phase|
+        next unless phase.respond_to?(:name) && phase.respond_to?(:shell_script)
+        next unless phase.name.to_s.include?('Generate Specs')
+        next if phase.shell_script.include?('HD_SHARE_EXT_NIL_SAFE_GENSPECS')
+        phase.shell_script += %(
+# HD_SHARE_EXT_NIL_SAFE_GENSPECS
+echo "[ShareExtension] Re-applying nil-safe patch after Generate Specs"
+node "#{codegen_patch}" "#{__dir__}" || echo "Share extension codegen patch failed"
+)
+      end
+    end
 `;
-  if (/post_install do \|installer\|\n/.test(src)) {
+  if (src.includes(POD_TAG)) {
+    // Upgrade an older hook that only patched at pod install time.
+    src = src.replace(POD_TAG, snippet.trimStart());
+  } else if (/post_install do \|installer\|\n/.test(src)) {
     src = src.replace(/post_install do \|installer\|\n/, (m) => m + snippet);
   } else {
     src += `\npost_install do |installer|${snippet}end\n`;
@@ -64,6 +81,14 @@ const CHROME_HELPERS = `
   // ${SWIFT_MARK}: show a cream panel immediately, log to the App Group, and
   // do not wait forever for share-sheet attachments before starting RN.
   private let hdChromeTag = 0x48444352
+
+  override func loadView() {
+    let v = UIView(frame: UIScreen.main.bounds)
+    v.backgroundColor = .clear
+    self.view = v
+    setupImmediateChrome()
+    logExt("loadView ${SWIFT_MARK}")
+  }
 
   private func logExt(_ message: String) {
     let line = "\\(ISO8601DateFormatter().string(from: Date())) \\(message)\\n"
@@ -193,6 +218,20 @@ function patchSwift(file) {
       self.loadingIndicator.removeFromSuperview()
   }`,
   );
+
+  // Defer React Native until after this run loop so the cream panel can paint.
+  // Starting RN in the same viewDidLoad turn can crash (unpatched Fabric
+  // provider) before the first frame, which looks like a frozen share sheet.
+  if (src.includes('deferred loadReactNativeContent')) {
+    // already rewritten
+  } else if (src.includes('    loadReactNativeContent()\n    setupNotificationCenterObserver()')) {
+    src = src.replace(
+      '    loadReactNativeContent()\n    setupNotificationCenterObserver()\n',
+      '    DispatchQueue.main.async { [weak self] in\n      self?.logExt("deferred loadReactNativeContent")\n      self?.loadReactNativeContent()\n    }\n    setupNotificationCenterObserver()\n',
+    );
+  } else {
+    throw new Error(`ShareExtensionViewController.swift missing loadReactNativeContent() call: ${file}`);
+  }
 
   // Hide the native chrome once the RN view is on screen (keeps the designed
   // transparent-around-card look when React Native starts successfully).

@@ -10,7 +10,9 @@
  * which kills the extension on launch (share sheet looks stuck).
  *
  * This rewrites the generated assignment to skip nil classes.
- * Idempotent. Safe to run from a CocoaPods post_install hook.
+ * Idempotent. Safe to run from a CocoaPods post_install hook AND again
+ * after Xcode's [CP-User] Generate Specs, which regenerates this file
+ * and would otherwise compile the unpatched dictionary.
  *
  * Marker: HD_SHARE_EXT_NIL_SAFE
  */
@@ -25,6 +27,7 @@ function findProviderFiles(iosRoot) {
   const roots = [
     path.join(iosRoot, 'build', 'generated', 'ios'),
     iosRoot,
+    ...process.argv.slice(3).filter(Boolean),
   ];
   const walk = (dir, depth) => {
     if (depth > 8 || !fs.existsSync(dir)) return;
@@ -63,6 +66,8 @@ function patchContent(content) {
 
   const replacement =
     `// ${MARKER}: skip nil NSClassFromString entries so the share extension does not crash\n` +
+    `    __attribute__((used)) static const char kHdShareExtNilSafe[] = "${MARKER}";\n` +
+    `    (void)kHdShareExtNilSafe;\n` +
     `    NSMutableDictionary *components = [NSMutableDictionary dictionary];\n` +
     lines.join('\n') + '\n' +
     `    thirdPartyComponents = [components copy];`;
