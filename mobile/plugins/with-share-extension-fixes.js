@@ -318,10 +318,9 @@ function xmlEscape(s) {
 function setPlistString(xml, key, value) {
   const block = `  <key>${key}</key>\n  <string>${xmlEscape(value)}</string>\n`;
   const re = new RegExp(`\\s*<key>${key}<\\/key>\\s*<string>[\\s\\S]*?<\\/string>`);
-  if (re.test(xml)) return xml.replace(re, `\n${block}`.replace(/\n$/, ''));
-  if (xml.includes('</dict>')) {
-    return xml.replace('</dict>', `${block}</dict>`);
-  }
+  if (re.test(xml)) return xml.replace(re, '\n' + block.replace(/\n$/, ''));
+  const last = xml.lastIndexOf('</dict>');
+  if (last >= 0) return xml.slice(0, last) + block + xml.slice(last);
   return xml;
 }
 
@@ -359,11 +358,18 @@ function stripExtensionRnPhases(project) {
   }
 }
 
-function installNativeShareController(root) {
+function installNativeShareController(root, projectRoot) {
   if (!fs.existsSync(NATIVE_SRC)) {
     throw new Error(`Native share controller missing: ${NATIVE_SRC}`);
   }
-  const body = fs.readFileSync(NATIVE_SRC, 'utf8');
+  const { url, key } = supabaseEnv(projectRoot);
+  let body = fs.readFileSync(NATIVE_SRC, 'utf8');
+  body = body
+    .replaceAll('__HD_SUPABASE_URL__', url || '')
+    .replaceAll('__HD_SUPABASE_ANON_KEY__', key || '');
+  if (body.includes('__HD_SUPABASE_')) {
+    throw new Error('Failed to bake Supabase constants into the native share panel');
+  }
   let wrote = 0;
   for (const dir of extensionDirs(root)) {
     const dest = path.join(root, dir, 'ShareExtensionViewController.swift');
@@ -390,7 +396,7 @@ module.exports = function withShareExtensionFixes(config) {
 
   config = withXcodeProject(config, (cfg) => {
     const root = cfg.modRequest.platformProjectRoot;
-    const n = installNativeShareController(root);
+    const n = installNativeShareController(root, cfg.modRequest.projectRoot);
     stripExtensionRnPhases(cfg.modResults);
     console.log(`[${TAG}] native share panel installed in ${n} target(s)`);
     return cfg;
