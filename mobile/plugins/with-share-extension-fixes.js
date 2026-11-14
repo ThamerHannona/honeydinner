@@ -285,6 +285,7 @@ function slimExtensionPodfile(podfilePath) {
   const slim = `target '${name}' do\n  # HD_NATIVE_SHARE_NO_RN\n  # Pure UIKit share panel: do not link React, Hermes, or Expo modules.\nend`;
   src = src.slice(0, start) + slim + after.slice(endRel);
   fs.writeFileSync(podfilePath, src);
+  console.log(`[${TAG}] slimmed ShareExtension Podfile target (no React Native)`);
   return true;
 }
 
@@ -339,6 +340,25 @@ function injectExtensionKeys(root, projectRoot) {
   }
 }
 
+
+function stripExtensionRnPhases(project) {
+  const natives = project.pbxNativeTargetSection();
+  for (const key of Object.keys(natives)) {
+    const t = natives[key];
+    if (!t || typeof t !== 'object' || !t.buildPhases) continue;
+    const name = String(t.name || '').replace(/"/g, '');
+    if (!/ShareExtension$/.test(name)) continue;
+    const before = t.buildPhases.length;
+    t.buildPhases = t.buildPhases.filter((phase) => {
+      const comment = String(phase.comment || '');
+      const skip = /Start Packager|Bundle React Native|Compile RCT|\[CP-User\] Generate Specs/.test(comment);
+      if (skip) console.log(`[${TAG}] removed build phase "${comment}" from ${name}`);
+      return !skip;
+    });
+    console.log(`[${TAG}] ${name} build phases ${before} -> ${t.buildPhases.length}`);
+  }
+}
+
 function installNativeShareController(root) {
   if (!fs.existsSync(NATIVE_SRC)) {
     throw new Error(`Native share controller missing: ${NATIVE_SRC}`);
@@ -371,17 +391,7 @@ module.exports = function withShareExtensionFixes(config) {
   config = withXcodeProject(config, (cfg) => {
     const root = cfg.modRequest.platformProjectRoot;
     const n = installNativeShareController(root);
-    const project = cfg.modResults;
-    const configs = project.pbxXCBuildConfigurationSection();
-    for (const key of Object.keys(configs)) {
-      const c = configs[key];
-      if (!c || !c.buildSettings) continue;
-      const bid = String(c.buildSettings.PRODUCT_BUNDLE_IDENTIFIER || '');
-      const pname = String(c.buildSettings.PRODUCT_NAME || '');
-      if (bid.includes('ShareExtension') || /ShareExtension/.test(pname)) {
-        c.buildSettings.APPLICATION_EXTENSION_API_ONLY = 'NO';
-      }
-    }
+    stripExtensionRnPhases(cfg.modResults);
     console.log(`[${TAG}] native share panel installed in ${n} target(s)`);
     return cfg;
   });

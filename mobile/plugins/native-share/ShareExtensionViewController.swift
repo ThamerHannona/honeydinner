@@ -485,15 +485,15 @@ class ShareExtensionViewController: UIViewController {
     let scheme = Bundle.main.object(forInfoDictionaryKey: "HostAppScheme") as? String ?? "honeydinner"
     guard let url = URL(string: "\(scheme)://\(path)") else { return }
     logExt("openHost \(url.absoluteString)")
+    // Open the host app without referencing UIApplication (the extension is built
+    // with APPLICATION_EXTENSION_API_ONLY = YES).
     var responder: UIResponder? = self
+    let sel = NSSelectorFromString("openURL:options:completionHandler:")
     while let r = responder {
-      if let app = r as? UIApplication {
-        app.open(url, options: [:], completionHandler: nil)
-        return
-      }
-      // UIApplication is not always in the responder chain; try the selector used by RN share extensions.
-      if r.responds(to: Selector(("openURL:options:completionHandler:"))) {
-        r.perform(Selector(("openURL:options:completionHandler:")), with: url, with: [:] as NSDictionary)
+      if r.responds(to: sel) {
+        typealias OpenFn = @convention(c) (Any, Selector, URL, NSDictionary, Any?) -> Void
+        let fn = unsafeBitCast(r.method(for: sel), to: OpenFn.self)
+        fn(r, sel, url, [:], nil)
         return
       }
       responder = r.next
