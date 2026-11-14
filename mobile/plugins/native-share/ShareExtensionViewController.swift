@@ -284,7 +284,7 @@ class ShareExtensionViewController: UIViewController {
     let fn = (Bundle.main.object(forInfoDictionaryKey: "SupabaseUrl") as? String).flatMap { $0.isEmpty ? nil : $0 } ?? bakedUrl
     let key = (Bundle.main.object(forInfoDictionaryKey: "SupabaseAnonKey") as? String).flatMap { $0.isEmpty ? nil : $0 } ?? bakedKey
     guard
-      !fn.isEmpty, !key.isEmpty, !fn.contains("__HD_SUPABASE_"),
+      !fn.isEmpty, !key.isEmpty, fn.hasPrefix("https://"),
       let endpoint = URL(string: fn.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/functions/v1/import-recipe")
     else {
       logExt("missing SupabaseUrl/SupabaseAnonKey")

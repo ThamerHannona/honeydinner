@@ -367,7 +367,7 @@ function installNativeShareController(root, projectRoot) {
   body = body
     .replaceAll('__HD_SUPABASE_URL__', url || '')
     .replaceAll('__HD_SUPABASE_ANON_KEY__', key || '');
-  if (body.includes('__HD_SUPABASE_')) {
+  if (body.includes('__HD_SUPABASE_URL__') || body.includes('__HD_SUPABASE_ANON_KEY__')) {
     throw new Error('Failed to bake Supabase constants into the native share panel');
   }
   let wrote = 0;
