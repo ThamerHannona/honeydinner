@@ -297,7 +297,7 @@ class ShareExtensionViewController: UIViewController {
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.setValue(key, forHTTPHeaderField: "apikey")
     req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-    req.timeoutInterval = 45
+    req.timeoutInterval = 90
     req.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url], options: [])
 
     importTask = URLSession.shared.dataTask(with: req) { [weak self] data, resp, err in
