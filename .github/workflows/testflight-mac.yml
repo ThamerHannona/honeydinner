@@ -5,6 +5,9 @@ name: Ship to TestFlight (free GitHub Mac build)
 # Needs the repo secret EXPO_TOKEN. Remember to bump ios.buildNumber in mobile/app.json first.
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'ship-*'
 
 jobs:
   build-and-submit:
