@@ -412,6 +412,41 @@ async function withOpenAI(info: PostInfo, transcript: string | null): Promise<Ex
 
 // ───────────────────────── Handler ─────────────────────────
 
+// ---- Cache: a post we've already read comes back instantly (used when the
+// share panel hands a recipe to the app, and for re-shares). ----
+const CACHE_TABLE = "hd_recipe_imports";
+function cacheHeaders(): Record<string, string> | null {
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key || !Deno.env.get("SUPABASE_URL")) return null;
+  return { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+}
+async function cacheGet(url: string): Promise<{ recipe: unknown; method: string } | null> {
+  const h = cacheHeaders();
+  if (!h) return null;
+  try {
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/${CACHE_TABLE}?select=recipe,method&url=eq.${encodeURIComponent(url)}&limit=1`, { headers: h });
+    if (!r.ok) return null;
+    const rows = await r.json() as { recipe: unknown; method: string | null }[];
+    return rows[0] ? { recipe: rows[0].recipe, method: `cache:${rows[0].method ?? ""}` } : null;
+  } catch {
+    return null;
+  }
+}
+async function cachePut(urls: string[], recipe: unknown, method: string) {
+  const h = cacheHeaders();
+  if (!h) return;
+  try {
+    const rows = [...new Set(urls.filter(Boolean))].map((url) => ({ url, recipe, method }));
+    await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/${CACHE_TABLE}?on_conflict=url`, {
+      method: "POST",
+      headers: { ...h, Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(rows),
+    });
+  } catch (e) {
+    log("cache put failed", String(e));
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -422,6 +457,12 @@ Deno.serve(async (req) => {
     }
     const body = await req.json().catch(() => null) as any;
     const url = normalizeUrl(typeof body?.url === "string" ? body.url : "");
+
+    const cached = body?.fresh ? null : await cacheGet(url);
+    if (cached) {
+      log("cache hit", url);
+      return json({ recipe: cached.recipe, method: cached.method });
+    }
 
     const info = await getPostInfo(url);
     log("post", info.platform, { caption: info.caption.slice(0, 80), videos: info.videoUrls.length, structured: !!info.structured });
@@ -458,6 +499,7 @@ Deno.serve(async (req) => {
       source: { platform: info.platform, url: info.url, creator: info.creator },
       ...(recipe.estimated ? { note: ESTIMATED_NOTE } : {}),
     };
+    await cachePut([url, info.url], draft, method);
     return json({ recipe: draft, method });
   } catch (e) {
     const message = e instanceof UserFacingError ? e.message : "Import failed";

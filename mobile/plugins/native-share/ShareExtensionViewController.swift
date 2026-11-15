@@ -802,12 +802,16 @@ class ShareExtensionViewController: UIViewController {
   }
 
   private func openHostAndDismiss() {
+    // Always carry the post link: if the App Group inbox can't be read, the app
+    // re-reads it from the link (the server returns it instantly from cache).
     var path = "shared"
+    let query = currentURL
+      .flatMap { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) }
+      .map { "url=\($0)" }
     if phase == .saved, let id = queuedRecipeId, !id.isEmpty {
-      path = "cook/\(id)"
-    } else if let url = currentURL,
-              let enc = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-      path = "shared?url=\(enc)"
+      path = "cook/\(id)" + (query.map { "?\($0)" } ?? "")
+    } else if let query {
+      path = "shared?\(query)"
     }
     openHost(path) { [weak self] in
       self?.dismissExtension()

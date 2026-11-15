@@ -46,3 +46,14 @@ export function useShareInbox() {
     return () => sub.remove();
   }, []);
 }
+
+/** The share panel passes the post link as ?url=. Router params can arrive
+ *  encoded once or twice depending on the path taken, so decode until stable. */
+export function decodeSharedUrl(raw: string | string[] | undefined): string | null {
+  let v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v) return null;
+  for (let i = 0; i < 3 && /%[0-9A-Fa-f]{2}/.test(v); i++) {
+    try { v = decodeURIComponent(v); } catch { break; }
+  }
+  return /^https?:\/\//i.test(v) ? v : null;
+}

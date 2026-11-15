@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { queueLink } from '@/lib/share-inbox';
-import { ingestInbox, whenHydrated } from '@/lib/use-share-inbox';
+import { decodeSharedUrl, ingestInbox, whenHydrated } from '@/lib/use-share-inbox';
 import { useApp } from '@/lib/store';
 import { C } from '@/lib/theme';
 
@@ -15,8 +15,7 @@ export default function SharedRoute() {
   useEffect(() => {
     whenHydrated(() => {
       void (async () => {
-        const raw = params.url;
-        const url = Array.isArray(raw) ? raw[0] : raw;
+        const url = decodeSharedUrl(params.url);
         if (url) queueLink(url);
         const { lastId, hasLink } = await ingestInbox();
         const id =

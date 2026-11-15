@@ -1,6 +1,6 @@
 import { useTheme } from '@/lib/theme-context';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -15,7 +15,9 @@ import { AnimatedFridgeGenie } from '@/components/brand';
 import { Button, PressableScale, Txt, AView } from '@/components/ui';
 import { findTimerMinutes } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
-import { ingestInbox, whenHydrated } from '@/lib/use-share-inbox';
+import { decodeSharedUrl, ingestInbox, whenHydrated } from '@/lib/use-share-inbox';
+import { importRecipe } from '@/lib/services/kitchen-ai';
+import type { RecipeDraft } from '@/lib/types';
 import { haptic } from '@/lib/theme';
 
 const KEEP_AWAKE_TAG = 'cooking-mode';
@@ -30,21 +32,29 @@ export default function CookMode() {
       Promise.resolve(deactivateKeepAwake(KEEP_AWAKE_TAG)).catch(() => {});
     };
   }, []);
-  const params = useLocalSearchParams<{ id: string; servings?: string }>();
+  const params = useLocalSearchParams<{ id: string; servings?: string; url?: string | string[] }>();
   const recipeId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const sharedUrl = decodeSharedUrl(params.url);
   const [inboxReady, setInboxReady] = useState(!recipeId);
   useEffect(() => {
     let cancelled = false;
     whenHydrated(() => {
       void (async () => {
-        if (recipeId && !useApp.getState().recipes.some((r) => r.id === recipeId)) {
-          await ingestInbox();
+        const has = () => useApp.getState().recipes.some((r) => r.id === recipeId);
+        if (recipeId && !has()) await ingestInbox();
+        // Share panel hand-off fallback: the inbox was empty, so read the post again
+        // from its link (the server answers from cache, so this is quick).
+        if (recipeId && !has() && sharedUrl) {
+          try {
+            const draft = await importRecipe({ kind: 'link', url: sharedUrl }, () => {});
+            if (!has()) useApp.getState().saveRecipe({ ...draft, id: recipeId } as RecipeDraft, true);
+          } catch { /* falls through to home */ }
         }
         if (!cancelled) setInboxReady(true);
       })();
     });
     return () => { cancelled = true; };
-  }, [recipeId]);
+  }, [recipeId, sharedUrl]);
   const recipe = useApp((s) => s.recipes.find((r) => r.id === recipeId));
   const insets = useSafeAreaInsets();
   const [idx, setIdx] = useState<number>(0);
@@ -94,7 +104,14 @@ export default function CookMode() {
   useEffect(() => {
     if (inboxReady && recipeId && !recipe) router.replace('/');
   }, [inboxReady, recipe, recipeId]);
-  if (!recipe) return null;
+  if (!recipe) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.night, alignItems: 'center', justifyContent: 'center', gap: 14 }} testID="cook-handoff">
+        <ActivityIndicator color={C.honey} />
+        <Text style={{ color: '#FBF6EA', fontSize: 16, fontWeight: '700' }}>Bringing your recipe over…</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1" style={{ backgroundColor: C.night }} testID="cook-mode-screen">
