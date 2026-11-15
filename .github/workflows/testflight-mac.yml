@@ -6,8 +6,8 @@ name: Ship to TestFlight (free GitHub Mac build)
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'ship-*'
+    branches:
+      - ship
 
 jobs:
   build-and-submit:
