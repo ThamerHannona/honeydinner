@@ -15,6 +15,7 @@ export default function Profile() {
   const { C, inputStyle } = useTheme();
   const insets = useSafeAreaInsets();
   const members = useApp((s) => s.members);
+  const household = useApp((s) => s.household);
   const pantryCount = useApp((s) => s.pantry.length);
   const recipeCount = useApp((s) => s.recipes.length);
   const renameMember = useApp((s) => s.renameMember);
@@ -105,7 +106,7 @@ export default function Profile() {
               </View>
             </PressableScale>
           ))}
-          <Row testID="profile-invite" icon={<UserPlus size={19} color={C.leafDark} />} label="Invite someone" tint={C.leafDark} onPress={() => router.push('/invite')} />
+          <Row testID="profile-invite" icon={<UserPlus size={19} color={C.leafDark} />} label={household ? `Our kitchen · ${household.code}` : 'Our kitchen — share with your partner'} tint={C.leafDark} onPress={() => router.push('/invite')} />
         </View>
 
         <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">

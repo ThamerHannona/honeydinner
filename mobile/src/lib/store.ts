@@ -6,6 +6,7 @@ import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS, starterRecip
 import type {
   DetectedItem,
   GroceryItem,
+  Household,
   Ingredient,
   Member,
   PantryItem,
@@ -26,6 +27,7 @@ interface AppState {
   groceries: GroceryItem[];
   vote: VoteSession | null;
   lastClipboard: string | null;
+  household: Household | null;
 
   // ephemeral drafts (not persisted)
   importDraft: RecipeDraft | null;
@@ -60,6 +62,13 @@ interface AppState {
   sendVote: (optionIds: string[]) => void;
   pickVote: (recipeId: string) => void;
   clearVote: () => void;
+
+  setHousehold: (h: Household | null) => void;
+  patchHousehold: (p: Partial<Household>) => void;
+  /** Apply records that came down from the shared kitchen. */
+  applyRemote: (records: { kind: string; id: string; data: unknown; deleted: boolean }[]) => void;
+  /** Queue an in-app "sent you a recipe" for the partner. */
+  sendRecipeToPartner: (recipeId: string) => boolean;
 }
 
 const seedState = () => ({
@@ -74,6 +83,7 @@ export const useApp = create<AppState>()(
       onboarded: false,
       signedIn: false,
       lastClipboard: null,
+      household: null,
       importDraft: null,
       scanDraft: [],
       ...seedState(),
@@ -260,6 +270,59 @@ export const useApp = create<AppState>()(
         set({ vote: { optionIds, status: 'pending', pickedId: null, sentAt: new Date().toISOString() } }),
       pickVote: (recipeId) => set((s) => (s.vote ? { vote: { ...s.vote, status: 'picked', pickedId: recipeId } } : {})),
       clearVote: () => set({ vote: null }),
+
+      setHousehold: (h) => set({ household: h }),
+      patchHousehold: (p) => set((s) => (s.household ? { household: { ...s.household, ...p } } : {})),
+      applyRemote: (records) =>
+        set((s) => {
+          let recipes = s.recipes;
+          let pantry = s.pantry;
+          let groceries = s.groceries;
+          let vote = s.vote;
+          const upsert = <T extends { id: string }>(list: T[], id: string, data: unknown, deleted: boolean): T[] => {
+            const rest = list.filter((x) => x.id !== id);
+            if (deleted || !data) return rest;
+            const i = list.findIndex((x) => x.id === id);
+            const next = { ...(data as T), id };
+            if (i === -1) return [next, ...rest];
+            const copy = list.slice();
+            copy[i] = next;
+            return copy;
+          };
+          for (const r of records) {
+            if (r.kind === 'recipe') recipes = upsert(recipes, r.id, r.data, r.deleted);
+            else if (r.kind === 'pantry') pantry = upsert(pantry, r.id, r.data, r.deleted);
+            else if (r.kind === 'grocery') groceries = upsert(groceries, r.id, r.data, r.deleted);
+            else if (r.kind === 'vote') vote = r.deleted ? null : ((r.data as VoteSession) ?? null);
+          }
+          return { recipes, pantry, groceries, vote };
+        }),
+      sendRecipeToPartner: (recipeId) => {
+        const s = get();
+        const h = s.household;
+        const recipe = s.recipes.find((r) => r.id === recipeId);
+        if (!h || !recipe) return false;
+        const partner = h.members.find((m) => m.memberId !== h.memberId) ?? null;
+        const me = s.members.find((m) => m.isMe);
+        set({
+          household: {
+            ...h,
+            outbox: [
+              ...h.outbox,
+              {
+                id: uid('sent'),
+                recipeId,
+                title: recipe.title,
+                from: me?.name ?? 'Your partner',
+                fromMemberId: h.memberId,
+                to: partner?.memberId ?? null,
+                at: new Date().toISOString(),
+              },
+            ],
+          },
+        });
+        return true;
+      },
     }),
     {
       name: 'honey-dinner-v1',
@@ -289,6 +352,7 @@ export const useApp = create<AppState>()(
         groceries: s.groceries,
         vote: s.vote,
         lastClipboard: s.lastClipboard,
+        household: s.household,
       }),
       onRehydrateStorage: () => () => {
         useApp.setState({ hydrated: true });

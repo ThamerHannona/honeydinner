@@ -22,6 +22,18 @@ export default function RecipeDetail() {
   const groceries = useApp((s) => s.groceries);
   const toggleSaved = useApp((s) => s.toggleSaved);
   const partnerName = useApp((s) => s.members.find((m) => !m.isMe)?.name ?? null);
+  const sharedKitchen = useApp((s) => !!s.household && s.household.members.length > 1);
+  const sendRecipeToPartner = useApp((s) => s.sendRecipeToPartner);
+  const onSend = () => {
+    if (!recipe) return;
+    if (sharedKitchen && sendRecipeToPartner(recipe.id)) {
+      haptic.success();
+      toast(`Sent to ${partnerName ?? 'your partner'} 💌`);
+      return;
+    }
+    haptic.tap();
+    void shareRecipe(recipe, partnerName);
+  };
   const addToGroceries = useApp((s) => s.addToGroceries);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -65,7 +77,7 @@ export default function RecipeDetail() {
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><ChevronLeft size={24} color={C.ink} /></View>
             </PressableScale>
             <View className="flex-row" style={{ gap: 10 }}>
-            <PressableScale testID="recipe-send" accessibilityRole="button" accessibilityLabel={partnerName ? `Send recipe to ${partnerName}` : 'Share recipe'} onPress={() => { haptic.tap(); void shareRecipe(recipe, partnerName); }}>
+            <PressableScale testID="recipe-send" accessibilityRole="button" accessibilityLabel={partnerName ? `Send recipe to ${partnerName}` : 'Share recipe'} onPress={onSend} onLongPress={() => void shareRecipe(recipe, partnerName)}>
               <View className="h-11 flex-row items-center justify-center rounded-full px-4" style={{ backgroundColor: C.paperOverlay, gap: 6 }}><Send size={18} color={C.ink} /><Txt weight="extrabold" className="text-[13px]">{partnerName ? `Send to ${partnerName}` : 'Share'}</Txt></View>
             </PressableScale>
             <PressableScale testID="recipe-save-toggle" accessibilityRole="button" accessibilityLabel={recipe.saved ? 'Unsave recipe' : 'Save recipe'} accessibilityState={{ selected: recipe.saved }} onPress={() => { haptic.success(); toggleSaved(recipe.id); }}>

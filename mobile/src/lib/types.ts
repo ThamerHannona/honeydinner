@@ -82,3 +82,31 @@ export interface DetectedItem {
   location: StorageLocation;
   expiresInDays: number | null;
 }
+
+/** Shared kitchen (you + partner), synced through the `household` server function. */
+export interface HouseholdMember {
+  memberId: string;
+  name: string;
+}
+export interface SentRecipe {
+  id: string;
+  recipeId: string;
+  title: string;
+  from: string;
+  fromMemberId: string;
+  to: string | null;
+  at: string;
+}
+export interface Household {
+  code: string;
+  token: string;
+  /** This phone's member id inside the household. */
+  memberId: string;
+  members: HouseholdMember[];
+  /** Server cursor: last change we've seen. */
+  since: number;
+  /** Last-synced JSON of every shared record, keyed "kind:id" — used to find local edits. */
+  shadow: Record<string, string>;
+  /** Recipes sent to the partner, waiting to go up with the next sync. */
+  outbox: SentRecipe[];
+}
