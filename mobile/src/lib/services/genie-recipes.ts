@@ -17,11 +17,21 @@ export const DIETS: { id: Diet; label: string; emoji: string }[] = [
   { id: 'mediterranean', label: 'Mediterranean', emoji: '🫒' },
   { id: 'paleo', label: 'Paleo', emoji: '🍖' },
   { id: 'atkins', label: 'Atkins', emoji: '🥓' },
+  { id: 'low-carb', label: 'Low-carb', emoji: '🥦' },
+  { id: 'high-protein', label: 'High-protein', emoji: '💪' },
   { id: 'low-fat', label: 'Low-fat', emoji: '🥗' },
+  { id: 'whole30', label: 'Whole30', emoji: '🍠' },
+  { id: 'vegan', label: 'Vegan', emoji: '🌿' },
   { id: 'plant-based', label: 'Plant-based', emoji: '🌱' },
   { id: 'vegetarian', label: 'Vegetarian', emoji: '🥚' },
+  { id: 'pescatarian', label: 'Pescatarian', emoji: '🐟' },
   { id: 'gluten-free', label: 'Gluten-free', emoji: '🌾' },
   { id: 'dairy-free', label: 'Dairy-free', emoji: '🥛' },
+  { id: 'nut-free', label: 'Nut-free', emoji: '🥜' },
+  { id: 'low-sugar', label: 'Low-sugar', emoji: '🍬' },
+  { id: 'low-sodium', label: 'Low-sodium', emoji: '🧂' },
+  { id: 'halal', label: 'Halal', emoji: '☪️' },
+  { id: 'kosher', label: 'Kosher', emoji: '✡️' },
 ];
 
 const base = () => process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') ?? '';

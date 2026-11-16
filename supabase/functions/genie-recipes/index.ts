@@ -2,7 +2,7 @@
 // matched to the household's eating style.
 //
 // Body: {
-//   diets: string[]            e.g. ["keto"], ["plant-based"], [] for no rules
+//   diets: string[]            e.g. ["keto"], ["vegan"], [] for no rules
 //   pantry: [{ name, location: "fridge"|"freezer"|"pantry", daysLeft: number|null }]
 //   servings?: number          default 2
 //   avoid?: string[]           titles already suggested / in the recipe box
@@ -26,7 +26,17 @@ const DIET_RULES: Record<string, string> = {
   paleo: "Paleo: meat, fish, eggs, vegetables, fruit, nuts, seeds, olive/avocado oil. No grains, legumes, dairy, refined sugar, processed food.",
   mediterranean: "Mediterranean: vegetables, legumes, whole grains, olive oil, fish and seafood, some poultry, eggs, yogurt/feta, herbs, lemon. Little red meat, no processed meat or added sugar.",
   "low-fat": "Low-fat: lean proteins (chicken breast, white fish, legumes, egg whites), lots of vegetables, whole grains; minimal oil (≤1 tsp per serving), no fried food, cream, butter or fatty cuts.",
-  "plant-based": "Plant-based (vegan): no meat, fish, eggs, dairy, honey or animal products of any kind.",
+  vegan: "Vegan: absolutely no animal products — no meat, poultry, fish, seafood, eggs, dairy (milk, butter, cheese, cream, yogurt, ghee), honey, gelatin, or animal stock.",
+  "plant-based": "Plant-based: whole-food, plant-forward and fully vegan — vegetables, legumes, whole grains, nuts, seeds, fruit; no animal products; minimal processed food and oil.",
+  pescatarian: "Pescatarian: no meat or poultry; fish, seafood, eggs and dairy are fine.",
+  "low-carb": "Low-carb: under ~40 g carbs per serving; limit bread, pasta, rice, potatoes and sugar; focus on protein and non-starchy vegetables.",
+  "high-protein": "High-protein: at least ~35 g protein per serving from lean meat, fish, eggs, Greek yogurt, cottage cheese, tofu, tempeh or legumes.",
+  whole30: "Whole30: no added sugar or sweeteners, alcohol, grains, legumes (including soy and peanuts), dairy, or processed additives. Meat, seafood, eggs, vegetables, fruit, natural fats.",
+  "nut-free": "Nut-free: no tree nuts, peanuts, nut butters, nut oils or nut milks.",
+  "low-sugar": "Low-sugar: no added sugar, honey, syrups or sweet sauces; minimal fruit; suitable for diabetics.",
+  "low-sodium": "Low-sodium: no added salt beyond a pinch; avoid soy sauce, stock cubes, cured meats, salty cheese and canned foods with salt; season with herbs, citrus, garlic and spices.",
+  halal: "Halal: no pork or pork products, no alcohol (including wine in cooking); meat must be halal.",
+  kosher: "Kosher: no pork or shellfish; never combine meat and dairy in the same dish.",
   vegetarian: "Vegetarian: no meat or fish; eggs and dairy are fine.",
   "gluten-free": "Gluten-free: no wheat, barley, rye, regular pasta/bread/flour, soy sauce (use tamari).",
   "dairy-free": "Dairy-free: no milk, butter, cheese, cream, yogurt.",
@@ -62,7 +72,7 @@ Deno.serve(async (req) => {
       "- Make exactly 4 different dinners (different proteins/cuisines/techniques).\n" +
       "- Build each mainly from the kitchen inventory. Prioritise items marked 'use within'. Assume basics are available: salt, pepper, water, cooking oil (unless the diet forbids it), common dried spices.\n" +
       "- At most 3 ingredients per recipe that are NOT in the inventory (have=false); prefer 0–1.\n" +
-      "- Diet rules are strict: every ingredient must comply. If the inventory can't make a compliant dinner, use fewer inventory items and add compliant missing items instead.\n" +
+      "- Diet rules are strict and ALL selected styles apply at once: every ingredient must comply with every rule. If the inventory can't make a compliant dinner, use fewer inventory items and add compliant missing items instead.\n" +
       "- title: appetising dish name in Title Case. blurb: one short sentence on why it's a good pick tonight (mention what it uses up).\n" +
       "- ingredients: qty as a number (0.5 not 1/2) or null; unit short (g, kg, ml, cup, tbsp, tsp, oz, lb, clove, can, pinch) or \"\" for whole items. Scale to the servings requested.\n" +
       "- steps: 5–9 short imperative steps, one action each, with times and heat levels.\n" +
