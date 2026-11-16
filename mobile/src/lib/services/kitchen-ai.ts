@@ -15,6 +15,7 @@ export const PLATFORM_LABEL: Record<SourcePlatform, string> = {
   snapchat: 'Snapchat',
   web: 'Web',
   photo: 'Photo',
+  genie: 'FridgeGenie',
 };
 
 export const extractUrl = (text: string): string | null => {
@@ -181,8 +182,8 @@ async function readBase64(photo: ScanPhoto): Promise<string> {
   if (photo.uri) {
     try {
       const IM = await import('expo-image-manipulator');
-      const out = await IM.manipulateAsync(photo.uri, [{ resize: { width: 1600 } }], {
-        compress: 0.7,
+      const out = await IM.manipulateAsync(photo.uri, [{ resize: { width: 2000 } }], {
+        compress: 0.85,
         format: IM.SaveFormat.JPEG,
         base64: true,
       });

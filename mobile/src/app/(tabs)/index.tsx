@@ -6,7 +6,9 @@ import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { RecipeImage as Image } from '@/components/recipe-image';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUpRight, Heart } from 'lucide-react-native';
+import { ArrowUpRight, Heart, Sparkles } from 'lucide-react-native';
+import { AnimatedFridgeGenie } from '@/components/fridge-genie';
+import { DIETS } from '@/lib/services/genie-recipes';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow, GenieBubble, MatchStamp, StatusDot } from '@/components/ui';
 import { pantryGreeting } from '@/lib/genie';
@@ -28,6 +30,7 @@ export default function TonightScreen() {
   const recipes = useApp((s) => s.recipes);
   const pantry = useApp((s) => s.pantry);
   const members = useApp((s) => s.members);
+  const diets = useApp((s) => s.diets);
   const insets = useSafeAreaInsets();
   const soon = useMemo(() => pantry.filter((item) => freshness(item.expiresAt) === 'soon').sort((a, b) => (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')), [pantry, revision]);
   const suggestions = useMemo(() => {
@@ -69,9 +72,21 @@ export default function TonightScreen() {
             />
             <Text style={[TONIGHT_SCRIPT, { color: C.onHoney, fontSize: 44, lineHeight: 50 }]}>honey?</Text>
           </View>
-          <GenieBubble testID="fridgegenie-greeting-card" style={{ marginBottom: 24 }}>
+          <GenieBubble testID="fridgegenie-greeting-card" style={{ marginBottom: 14 }}>
             <Txt testID="fridgegenie-greeting" style={{ color: C.onGreen, fontSize: 14, lineHeight: 20 }}>{pantryGreeting(pantry)}</Txt>
           </GenieBubble>
+          <PressableScale testID="tonight-genie-chef" accessibilityRole="button" accessibilityLabel="Ask FridgeGenie to make dinner from my kitchen" onPress={() => router.push('/genie-chef')} style={{ marginBottom: 24 }}>
+            <View className="flex-row items-center rounded-[22px] px-4 py-3" style={{ backgroundColor: C.paper, borderWidth: 1.5, borderColor: C.ink, gap: 12 }}>
+              <AnimatedFridgeGenie size={46} mood="idle" testID="tonight-genie-chef-mascot" />
+              <View className="flex-1">
+                <Txt weight="extrabold" className="text-[16px]">Cook from my kitchen</Txt>
+                <Txt weight="semibold" className="mt-0.5 text-[13px]" style={{ color: C.inkSoft }} numberOfLines={1}>
+                  {diets.length ? `FridgeGenie makes ${diets.map((d) => DIETS.find((x) => x.id === d)?.label ?? d).join(' + ')} dinners` : 'FridgeGenie invents dinners from what you have'}
+                </Txt>
+              </View>
+              <Sparkles size={20} color={C.honey} fill={C.honey} />
+            </View>
+          </PressableScale>
           {hero ? (
             <HardShadow color={C.ink} x={6} y={6} radius={28} style={{ marginBottom: 24 }}><View testID="tonight-featured-card" className="rounded-[28px] bg-honey p-5" style={{ borderWidth: 1.5, borderColor: C.ink }}>
               <View className="mb-2 h-[146px] flex-row items-start justify-between">

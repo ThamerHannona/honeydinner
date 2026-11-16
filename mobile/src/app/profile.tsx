@@ -1,9 +1,10 @@
+import { DIETS } from '@/lib/services/genie-recipes';
 import { useTheme } from '@/lib/theme-context';
 import React, { useState } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, ChevronRight, LogOut, RotateCcw, UserPlus } from 'lucide-react-native';
+import { Bell, ChevronRight, LogOut, RotateCcw, Sparkles, UserPlus } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow } from '@/components/ui';
@@ -16,6 +17,7 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   const members = useApp((s) => s.members);
   const household = useApp((s) => s.household);
+  const diets = useApp((s) => s.diets);
   const pantryCount = useApp((s) => s.pantry.length);
   const recipeCount = useApp((s) => s.recipes.length);
   const renameMember = useApp((s) => s.renameMember);
@@ -107,6 +109,7 @@ export default function Profile() {
             </PressableScale>
           ))}
           <Row testID="profile-invite" icon={<UserPlus size={19} color={C.leafDark} />} label={household ? `Our kitchen · ${household.code}` : 'Our kitchen — share with your partner'} tint={C.leafDark} onPress={() => router.push('/invite')} />
+          <Row testID="profile-diet" icon={<Sparkles size={19} color={C.leafDark} />} label={diets.length ? `Eating style · ${diets.map((d) => DIETS.find((x) => x.id === d)?.label ?? d).join(', ')}` : 'Eating style — keto, paleo, plant-based…'} tint={C.leafDark} onPress={() => router.push('/genie-chef')} />
         </View>
 
         <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">

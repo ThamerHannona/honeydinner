@@ -5,6 +5,7 @@ import { aisleToLocation, checkOffBoughtGroceries, daysFromNow, defaultShelfLife
 import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS, starterRecipes } from './mock-data';
 import type {
   DetectedItem,
+  Diet,
   GroceryItem,
   Household,
   Ingredient,
@@ -28,6 +29,7 @@ interface AppState {
   vote: VoteSession | null;
   lastClipboard: string | null;
   household: Household | null;
+  diets: Diet[];
 
   // ephemeral drafts (not persisted)
   importDraft: RecipeDraft | null;
@@ -52,6 +54,7 @@ interface AppState {
   saveRecipe: (d: RecipeDraft, imported: boolean) => string;
   toggleSaved: (id: string) => void;
   deleteRecipe: (id: string) => void;
+  updateRecipe: (id: string, patch: Partial<Recipe>) => void;
   setStepImage: (id: string, index: number, url: string) => void;
 
   addToGroceries: (ingredients: Ingredient[], recipeId: string | null) => number;
@@ -63,12 +66,30 @@ interface AppState {
   pickVote: (recipeId: string) => void;
   clearVote: () => void;
 
+  setDiets: (d: Diet[]) => void;
   setHousehold: (h: Household | null) => void;
   patchHousehold: (p: Partial<Household>) => void;
   /** Apply records that came down from the shared kitchen. */
   applyRemote: (records: { kind: string; id: string; data: unknown; deleted: boolean }[]) => void;
   /** Queue an in-app "sent you a recipe" for the partner. */
   sendRecipeToPartner: (recipeId: string) => boolean;
+}
+
+/** Drop duplicate recipes (same id, same source link, or same title + steps), keeping the newest. */
+export function dedupeRecipes(list: Recipe[]): Recipe[] {
+  const seen = new Set<string>();
+  const out: Recipe[] = [];
+  for (const r of list) {
+    const keys = [
+      `id:${r.id}`,
+      r.source?.url ? `url:${r.source.url}` : null,
+      `t:${r.title.trim().toLowerCase()}|${r.steps.length}|${r.ingredients.length}`,
+    ].filter(Boolean) as string[];
+    if (keys.some((k) => seen.has(k))) continue;
+    keys.forEach((k) => seen.add(k));
+    out.push(r);
+  }
+  return out.length === list.length ? list : out;
 }
 
 const seedState = () => ({
@@ -84,6 +105,7 @@ export const useApp = create<AppState>()(
       signedIn: false,
       lastClipboard: null,
       household: null,
+      diets: [],
       importDraft: null,
       scanDraft: [],
       ...seedState(),
@@ -179,12 +201,19 @@ export const useApp = create<AppState>()(
           importedAt: imported ? now : null,
           createdAt: now,
         };
-        set((s) => ({ recipes: [clean, ...s.recipes], importDraft: null }));
+        // Same recipe saved twice (share inbox + link fallback, or re-sharing the
+        // same post) replaces the old copy instead of piling up duplicates.
+        const url = clean.source?.url ?? null;
+        set((s) => ({
+          recipes: [clean, ...s.recipes.filter((r) => r.id !== id && !(url && r.source?.url === url))],
+          importDraft: null,
+        }));
         return id;
       },
       toggleSaved: (id) =>
         set((s) => ({ recipes: s.recipes.map((r) => (r.id === id ? { ...r, saved: !r.saved } : r)) })),
       deleteRecipe: (id) => set((s) => ({ recipes: s.recipes.filter((r) => r.id !== id) })),
+      updateRecipe: (id, patch) => set((s) => ({ recipes: s.recipes.map((r) => (r.id === id ? { ...r, ...patch, id } : r)) })),
       setStepImage: (id, index, url) =>
         set((s) => {
           const target = String(id);
@@ -271,6 +300,7 @@ export const useApp = create<AppState>()(
       pickVote: (recipeId) => set((s) => (s.vote ? { vote: { ...s.vote, status: 'picked', pickedId: recipeId } } : {})),
       clearVote: () => set({ vote: null }),
 
+      setDiets: (d) => set({ diets: d }),
       setHousehold: (h) => set({ household: h }),
       patchHousehold: (p) => set((s) => (s.household ? { household: { ...s.household, ...p } } : {})),
       applyRemote: (records) =>
@@ -353,9 +383,10 @@ export const useApp = create<AppState>()(
         vote: s.vote,
         lastClipboard: s.lastClipboard,
         household: s.household,
+        diets: s.diets,
       }),
       onRehydrateStorage: () => () => {
-        useApp.setState({ hydrated: true });
+        useApp.setState((s) => ({ hydrated: true, recipes: dedupeRecipes(s.recipes) }));
       },
     },
   ),

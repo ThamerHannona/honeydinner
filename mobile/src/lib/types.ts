@@ -1,4 +1,7 @@
-export type SourcePlatform = 'tiktok' | 'instagram' | 'facebook' | 'snapchat' | 'web' | 'photo';
+export type SourcePlatform = 'tiktok' | 'instagram' | 'facebook' | 'snapchat' | 'web' | 'photo' | 'genie';
+
+/** Eating styles FridgeGenie cooks for. */
+export type Diet = 'carnivore' | 'keto' | 'atkins' | 'paleo' | 'mediterranean' | 'low-fat' | 'plant-based' | 'vegetarian' | 'gluten-free' | 'dairy-free';
 export type StorageLocation = 'fridge' | 'freezer' | 'pantry';
 export type Aisle = 'Produce' | 'Dairy' | 'Meat & Fish' | 'Pantry' | 'Frozen' | 'Other';
 

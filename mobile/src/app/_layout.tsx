@@ -57,6 +57,7 @@ function RootLayoutNav() {
         <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="scan-review" options={{ presentation: 'modal' }} />
         <Stack.Screen name="share-card" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="genie-chef" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="recipe/[id]" />
         <Stack.Screen name="cook/[id]" options={{ presentation: 'fullScreenModal', contentStyle: { backgroundColor: C.night } }} />
         <Stack.Screen name="ask-honey" options={{ presentation: 'modal' }} />

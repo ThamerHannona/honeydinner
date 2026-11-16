@@ -9,7 +9,9 @@ import { ScreenHeader } from '@/components/app';
 import { IconButton, PressableScale, Txt } from '@/components/ui';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { matchRecipe } from '@/lib/kitchen';
-import { useApp } from '@/lib/store';
+import { toast, useApp } from '@/lib/store';
+import { haptic } from '@/lib/theme';
+import { ConfirmDelete } from '@/components/confirm-delete';
 
 import type { SourcePlatform } from '@/lib/types';
 
@@ -30,6 +32,8 @@ export default function RecipesScreen() {
   const PASTELS = [C.plateWheat, C.plateSage, C.plateRose, C.plateLilac];
   const recipes = useApp((s) => s.recipes);
   const pantry = useApp((s) => s.pantry);
+  const deleteRecipe = useApp((s) => s.deleteRecipe);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const [source, setSource] = useState<SourcePlatform | null>(null);
   const [matchFilter, setMatchFilter] = useState<MatchFilter>(null);
   const [quickOnly, setQuickOnly] = useState<boolean>(false);
@@ -105,7 +109,7 @@ export default function RecipesScreen() {
                 const missing = match.missing.length;
                 const pastel = PASTELS[(index * 2 + column) % PASTELS.length];
                 return (
-                  <PressableScale key={recipe.id} revealIndex={index} testID={`recipe-card-${recipe.id}`} accessibilityRole="button" accessibilityLabel={`Open ${recipe.title}, ${recipe.cookTime} minutes, ${missing === 0 ? 'can make now' : `missing ${missing} ingredients`}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id } })}>
+                  <PressableScale key={recipe.id} revealIndex={index} testID={`recipe-card-${recipe.id}`} accessibilityRole="button" accessibilityLabel={`Open ${recipe.title}, ${recipe.cookTime} minutes, ${missing === 0 ? 'can make now' : `missing ${missing} ingredients`}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id } })} onLongPress={() => { haptic.tap(); setPendingDelete({ id: recipe.id, title: recipe.title }); }} delayLongPress={350}>
                     <View className="overflow-hidden" style={{ height: (index + column) % 2 === 0 ? 216 : 174, borderRadius: 23, borderWidth: 1.5, borderColor: C.ink, backgroundColor: pastel, padding: 10 }}>
                       <Image testID={`recipe-photo-${recipe.id}`} source={{ uri: recipe.image }} contentFit="cover" accessibilityLabel={recipe.title} style={{ flex: 1, borderRadius: 15 }} transition={180} />
                       <View className="absolute left-2.5 top-2.5 rounded-full bg-white px-2.5 py-1">
@@ -131,6 +135,19 @@ export default function RecipesScreen() {
           </View>
         ) : null}
       </ScrollView>
+      <ConfirmDelete
+        visible={!!pendingDelete}
+        title={pendingDelete?.title ?? null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) {
+            deleteRecipe(pendingDelete.id);
+            haptic.success();
+            toast(`Deleted ${pendingDelete.title}`);
+          }
+          setPendingDelete(null);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

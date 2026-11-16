@@ -6,7 +6,8 @@ import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, ChevronLeft, ExternalLink, Heart, Minus, Plus, Send } from 'lucide-react-native';
+import { Check, ChevronLeft, ExternalLink, Heart, Minus, Plus, Send, Trash2 } from 'lucide-react-native';
+import { ConfirmDelete } from '@/components/confirm-delete';
 import { Button, PressableScale, Txt } from '@/components/ui';
 import { formatIngredientAmount, isBasic, matchRecipe, namesMatch, pantryHas } from '@/lib/kitchen';
 import { PLATFORM_LABEL } from '@/lib/services/kitchen-ai';
@@ -21,6 +22,8 @@ export default function RecipeDetail() {
   const groceries = useApp((s) => s.groceries);
   const toggleSaved = useApp((s) => s.toggleSaved);
   const partnerName = useApp((s) => s.members.find((m) => !m.isMe)?.name ?? null);
+  const deleteRecipe = useApp((s) => s.deleteRecipe);
+  const [confirmDelete, setConfirmDelete] = React.useState<boolean>(false);
   const onSend = () => {
     if (!recipe) return;
     haptic.tap();
@@ -71,6 +74,9 @@ export default function RecipeDetail() {
             <View className="flex-row" style={{ gap: 10 }}>
             <PressableScale testID="recipe-send" accessibilityRole="button" accessibilityLabel={partnerName ? `Send recipe to ${partnerName}` : 'Share recipe'} onPress={onSend}>
               <View className="h-11 flex-row items-center justify-center rounded-full px-4" style={{ backgroundColor: C.paperOverlay, gap: 6 }}><Send size={18} color={C.ink} /><Txt weight="extrabold" className="text-[13px]">{partnerName ? `Send to ${partnerName}` : 'Share'}</Txt></View>
+            </PressableScale>
+            <PressableScale testID="recipe-delete" accessibilityRole="button" accessibilityLabel="Delete recipe" onPress={() => setConfirmDelete(true)}>
+              <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><Trash2 size={19} color={C.ink} /></View>
             </PressableScale>
             <PressableScale testID="recipe-save-toggle" accessibilityRole="button" accessibilityLabel={recipe.saved ? 'Unsave recipe' : 'Save recipe'} accessibilityState={{ selected: recipe.saved }} onPress={() => { haptic.success(); toggleSaved(recipe.id); }}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><Heart size={21} color={C.ink} fill={recipe.saved ? C.honey : 'transparent'} /></View>
@@ -159,6 +165,21 @@ export default function RecipeDetail() {
           <Button testID="start-cooking" variant="dark" className="rounded-full px-2" label="Start cooking" onPress={() => router.push({ pathname: '/cook/[id]', params: { id: recipe.id, servings: String(servings) } })} />
         </View>
       </View>
+      <ConfirmDelete
+        visible={confirmDelete}
+        title={recipe.title}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          haptic.success();
+          const t = recipe.title;
+          router.replace('/recipes');
+          setTimeout(() => {
+            deleteRecipe(recipe.id);
+            toast(`Deleted ${t}`);
+          }, 50);
+        }}
+      />
     </View>
   );
 }

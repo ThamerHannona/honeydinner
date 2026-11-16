@@ -3,7 +3,7 @@ import { useTheme } from '@/lib/theme-context';
 import React from 'react';
 import { Text, View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
-import { Globe, Image as ImageIcon } from 'lucide-react-native';
+import { Globe, Image as ImageIcon, Sparkles } from 'lucide-react-native';
 import { fonts, offsets, shape, signature, typography } from '@/lib/theme';
 import type { SourcePlatform } from '@/lib/types';
 import { GenieBubble, Txt } from './ui';
@@ -90,6 +90,7 @@ export const PLATFORM_COLOR: Record<SourcePlatform, string> = {
   snapchat: staticC.snapchat,
   web: staticC.forest,
   photo: staticC.honeyText,
+  genie: staticC.forest,
 };
 
 export function PlatformGlyph({ platform, size = 14, color }: { platform: SourcePlatform; size?: number; color?: string }) {
@@ -132,6 +133,8 @@ export function PlatformGlyph({ platform, size = 14, color }: { platform: Source
       return <Globe size={size} color={fg} strokeWidth={2.4} />;
     case 'photo':
       return <ImageIcon size={size} color={fg} strokeWidth={2.4} />;
+    case 'genie':
+      return <Sparkles size={size} color={fg} strokeWidth={2.4} />;
   }
 }
 
@@ -161,7 +164,7 @@ export function PlatformPill({ platform, label }: { platform: SourcePlatform; la
   const { C } = useTheme();
   const names: Record<SourcePlatform, string> = {
     tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook',
-    snapchat: 'Snapchat', web: 'Web', photo: 'Photo',
+    snapchat: 'Snapchat', web: 'Web', photo: 'Photo', genie: 'FridgeGenie',
   };
   return (
     <View testID={`platform-pill-${platform}`} accessibilityLabel={label ?? names[platform]}
