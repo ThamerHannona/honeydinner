@@ -1,11 +1,13 @@
 import { useTheme } from '@/lib/theme-context';
+import { goBack } from '@/lib/nav';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, ChevronLeft, ExternalLink, Heart, Minus, Plus } from 'lucide-react-native';
+import { Check, ChevronLeft, ExternalLink, Heart, Minus, Plus, Send } from 'lucide-react-native';
+import { shareRecipe } from '@/lib/share-recipe';
 import { Button, PressableScale, Txt } from '@/components/ui';
 import { formatIngredientAmount, isBasic, matchRecipe, namesMatch, pantryHas } from '@/lib/kitchen';
 import { PLATFORM_LABEL } from '@/lib/services/kitchen-ai';
@@ -19,6 +21,7 @@ export default function RecipeDetail() {
   const pantry = useApp((s) => s.pantry);
   const groceries = useApp((s) => s.groceries);
   const toggleSaved = useApp((s) => s.toggleSaved);
+  const partnerName = useApp((s) => s.members.find((m) => !m.isMe)?.name ?? null);
   const addToGroceries = useApp((s) => s.addToGroceries);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -31,7 +34,7 @@ export default function RecipeDetail() {
     return (
       <View className="flex-1 items-center justify-center bg-cream px-10" testID="recipe-missing">
         <Txt display weight="bold" className="text-[22px]">Recipe not found</Txt>
-        <View className="mt-5 w-full"><Button testID="recipe-missing-back" label="Go back" onPress={() => router.back()} /></View>
+        <View className="mt-5 w-full"><Button testID="recipe-missing-back" label="Go back" onPress={() => goBack()} /></View>
       </View>
     );
   }
@@ -58,12 +61,17 @@ export default function RecipeDetail() {
           </View>
           <View className="absolute bottom-4 right-5 rounded-lg bg-white px-2 py-1"><Txt label weight="extrabold" className="text-[13px] tracking-wider">PHOTO</Txt></View>
           <View className="absolute left-5 right-5 flex-row justify-between" style={{ top: insets.top + 12 }} pointerEvents="box-none">
-            <PressableScale testID="recipe-back" accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/recipes'))}>
+            <PressableScale testID="recipe-back" accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? goBack() : router.replace('/recipes'))}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><ChevronLeft size={24} color={C.ink} /></View>
+            </PressableScale>
+            <View className="flex-row" style={{ gap: 10 }}>
+            <PressableScale testID="recipe-send" accessibilityRole="button" accessibilityLabel={partnerName ? `Send recipe to ${partnerName}` : 'Share recipe'} onPress={() => { haptic.tap(); void shareRecipe(recipe, partnerName); }}>
+              <View className="h-11 flex-row items-center justify-center rounded-full px-4" style={{ backgroundColor: C.paperOverlay, gap: 6 }}><Send size={18} color={C.ink} /><Txt weight="extrabold" className="text-[13px]">{partnerName ? `Send to ${partnerName}` : 'Share'}</Txt></View>
             </PressableScale>
             <PressableScale testID="recipe-save-toggle" accessibilityRole="button" accessibilityLabel={recipe.saved ? 'Unsave recipe' : 'Save recipe'} accessibilityState={{ selected: recipe.saved }} onPress={() => { haptic.success(); toggleSaved(recipe.id); }}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><Heart size={21} color={C.ink} fill={recipe.saved ? C.honey : 'transparent'} /></View>
             </PressableScale>
+            </View>
           </View>
         </View>
 

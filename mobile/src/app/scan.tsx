@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/theme-context';
+import { goBack } from '@/lib/nav';
 import React, { useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -57,7 +58,7 @@ export default function ScanScreen() {
   return (
     <View className="flex-1 bg-cream px-5" style={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }} testID="scan-screen">
       <View className="mb-5 flex-row items-center" style={{ gap: 18 }}>
-        <PressableScale testID="scan-close" accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><View className="h-11 w-11 items-center justify-center rounded-full bg-cream-deep"><X size={20} color={C.ink} /></View></PressableScale>
+        <PressableScale testID="scan-close" accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack()}><View className="h-11 w-11 items-center justify-center rounded-full bg-cream-deep"><X size={20} color={C.ink} /></View></PressableScale>
         <View className="flex-1 flex-row rounded-full bg-cream-deep p-1" accessibilityRole="tablist">
           {(['fridge', 'receipt'] as const).map((option) => <PressableScale key={option} testID={`scan-mode-${option}`} accessibilityRole="tab" accessibilityLabel={option === 'fridge' ? 'Fridge' : 'Receipt'} accessibilityState={{ selected: mode === option }} onPress={() => { setMode(option); scan.reset(); }} disabled={scan.isPending} style={{ flex: 1 }}><View className="h-10 items-center justify-center rounded-full" style={{ backgroundColor: mode === option ? C.ink : 'transparent' }}><Txt weight="extrabold" style={{ color: mode === option ? C.cream : C.inkSoft, fontSize: 14 }}>{option === 'fridge' ? 'Fridge' : 'Receipt'}</Txt></View></PressableScale>)}
         </View>

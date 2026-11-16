@@ -1,4 +1,5 @@
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { goBack } from '@/lib/nav';
 import React, { useRef, useState } from 'react';
 import { Keyboard, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -33,7 +34,7 @@ export default function PantryAdd() {
     haptic.success();
     addPantryItem({ name: name.trim(), emoji: guessEmoji(name), quantity: qty.trim(), location: loc, expiresAt });
     toast(`${name.trim()} added to ${loc === 'fridge' ? 'Fridge' : loc === 'freezer' ? 'Freezer' : 'Pantry'}.`);
-    if (router.canGoBack()) router.back();
+    if (router.canGoBack()) goBack();
     else router.replace('/pantry');
   };
 

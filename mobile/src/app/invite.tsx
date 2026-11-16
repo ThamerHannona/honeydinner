@@ -1,4 +1,5 @@
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { goBack } from '@/lib/nav';
 import React, { useState } from 'react';
 import { Share, TextInput, View, Keyboard } from 'react-native';
 import { router } from 'expo-router';
@@ -23,7 +24,7 @@ export default function Invite() {
   const finish = () => {
     Keyboard.dismiss();
     if (!fromProfile) completeOnboarding();
-    if (fromProfile) router.back();
+    if (fromProfile) goBack();
     else router.dismissTo('/');
   };
 

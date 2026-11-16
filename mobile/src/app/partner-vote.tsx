@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/theme-context';
+import { goBack } from '@/lib/nav';
 import React, { useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -33,7 +34,7 @@ export default function PartnerVote() {
     pickVote(choice);
     const r = recipes.find((x) => x.id === choice);
     toast(`${partner?.name} picked ${r?.title ?? 'dinner'}!`);
-    router.back();
+    goBack();
   };
 
   return (
@@ -45,7 +46,7 @@ export default function PartnerVote() {
             {partner?.name}'s phone · demo
           </Txt>
         </View>
-        <PressableScale testID="partner-close" accessibilityLabel="Close" onPress={() => router.back()}>
+        <PressableScale testID="partner-close" accessibilityLabel="Close" onPress={() => goBack()}>
           <View className="h-10 w-10 items-center justify-center rounded-full bg-white/80">
             <X size={20} color={C.ink} />
           </View>

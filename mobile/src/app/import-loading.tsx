@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/theme-context';
+import { goBack } from '@/lib/nav';
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -39,7 +40,7 @@ export default function ImportLoading() {
     return () => { cancelled.current = true; if (timer.current) clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const close = () => { cancelled.current = true; router.back(); };
+  const close = () => { cancelled.current = true; goBack(); };
   return (
     <View className="flex-1 bg-cream" testID="import-loading-screen">
       <SheetHeader fullScreen onClose={close} />

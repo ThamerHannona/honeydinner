@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { goBack } from '@/lib/nav';
 import { ScrollView, View } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -40,14 +41,14 @@ export default function AskHoney() {
     haptic.success();
     sendVote(selectedIds);
     toast(`Sent! I'll let you know what ${partnerName} picks.`);
-    if (router.canGoBack()) router.back();
+    if (router.canGoBack()) goBack();
     else router.replace('/');
   };
 
   return (
     <View className="flex-1" testID="ask-honey-screen" style={{ backgroundColor: C.cream }}>
       <View className="flex-row items-center px-5 pb-5" style={{ paddingTop: insets.top + 12 }}>
-        <PressableScale testID="ask-honey-back" accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+        <PressableScale testID="ask-honey-back" accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.canGoBack() ? goBack() : router.replace('/')}>
           <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paper }}><ChevronLeft size={23} color={C.ink} /></View>
         </PressableScale>
         <Txt label weight="extrabold" className="flex-1 pr-11 text-center text-[15px] uppercase tracking-widest" style={{ color: C.ink }}>Ask Honey · Tonight</Txt>

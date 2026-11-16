@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/theme-context';
+import { goBack } from '@/lib/nav';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -118,7 +119,7 @@ export default function CookMode() {
       <StatusBar style="light" backgroundColor={C.night} />
       <View style={{ paddingTop: insets.top + 8 }} className="px-5">
         <View className="flex-row items-center justify-between">
-          <PressableScale testID="cook-close" accessibilityLabel="Exit cooking mode" onPress={() => router.back()}>
+          <PressableScale testID="cook-close" accessibilityLabel="Exit cooking mode" onPress={() => goBack()}>
             <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.timerTrack }}>
               <X size={22} color={C.onInk} />
             </View>
@@ -211,7 +212,7 @@ export default function CookMode() {
               onPress={() => {
                 haptic.success();
                 toast(`${recipe.title} — nailed it!`);
-                router.back();
+                goBack();
               }}
             />
           </View>

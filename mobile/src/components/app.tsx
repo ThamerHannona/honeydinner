@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/theme-context';
+import { goBack } from '@/lib/nav';
 import React, { useEffect, useMemo } from 'react';
 import { Platform, View } from 'react-native';
 import { RecipeImage as Image } from '@/components/recipe-image';
@@ -213,7 +214,7 @@ export function SheetHeader({
       <PressableScale
         testID="sheet-close"
         accessibilityLabel="Close"
-        onPress={onClose ?? (() => (router.canGoBack() ? router.back() : router.replace('/')))}
+        onPress={onClose ?? (() => (router.canGoBack() ? goBack() : router.replace('/')))}
         hitSlop={8}
       >
         <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.quietFill }}>
