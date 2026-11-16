@@ -840,28 +840,39 @@ class ShareExtensionViewController: UIViewController {
       finished = true
       done()
     }
-    var opened = false
+    // Walk the responder chain and use UIApplication specifically. UIWindowScene
+    // also answers openURL:options:completionHandler:, but from an extension it
+    // silently fails — which is why "Cook it now" never left TikTok.
+    var candidates: [UIResponder] = []
     var responder: UIResponder? = self
     while let r = responder {
-      if r !== self, r.responds(to: selector) {
-        let opener = unsafeBitCast(r, to: HDApplicationOpenURL.self)
-        opener.open(url, options: [:], completionHandler: { success in
-          self.logExt("openURL:options:completionHandler: \(success) via \(type(of: r))")
-          DispatchQueue.main.async(execute: finish)
-        })
-        opened = true
-        logExt("opened via responder \(type(of: r))")
-        break
-      }
+      if r !== self, r.responds(to: selector) { candidates.append(r) }
       responder = r.next
     }
-    if !opened {
-      extensionContext?.open(url) { success in
-        self.logExt("extensionContext.open \(success)")
-        DispatchQueue.main.async(execute: finish)
+    let appClass: AnyClass? = NSClassFromString("UIApplication")
+    let isApp: (UIResponder) -> Bool = { r in appClass.map { r.isKind(of: $0) } ?? false }
+    candidates = candidates.filter(isApp) + candidates.filter { !isApp($0) }
+    logExt("open candidates: \(candidates.map { String(describing: type(of: $0)) })")
+
+    func attempt(_ i: Int) {
+      if i >= candidates.count {
+        extensionContext?.open(url) { success in
+          self.logExt("extensionContext.open \(success)")
+          DispatchQueue.main.async(execute: finish)
+        }
+        return
       }
+      let r = candidates[i]
+      let opener = unsafeBitCast(r, to: HDApplicationOpenURL.self)
+      opener.open(url, options: [:], completionHandler: { success in
+        self.logExt("openURL via \(type(of: r)): \(success)")
+        DispatchQueue.main.async {
+          if success { finish() } else { attempt(i + 1) }
+        }
+      })
     }
+    attempt(0)
     // Never dismiss before the open has a chance to leave the extension.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: finish)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: finish)
   }
 }
