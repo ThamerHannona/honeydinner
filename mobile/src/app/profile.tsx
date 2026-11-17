@@ -112,6 +112,8 @@ export default function Profile() {
           ))}
           <Row testID="profile-invite" icon={<UserPlus size={19} color={C.leafDark} />} label={household ? `Our kitchen · ${household.code}` : 'Our kitchen — share with your partner'} tint={C.leafDark} onPress={() => router.push('/invite')} />
           <Row testID="profile-diet" icon={<Sparkles size={19} color={C.leafDark} />} label={diets.length ? `Eating style · ${diets.map((d) => DIETS.find((x) => x.id === d)?.label ?? d).join(', ')}` : 'Eating style — keto, paleo, plant-based…'} tint={C.leafDark} onPress={() => router.push('/genie-chef')} />
+          <Row testID="profile-tour" icon={<Sparkles size={19} color={C.leafDark} />} label="Replay the tour (FridgeGenie insists)" tint={C.leafDark} onPress={() => router.push('/onboarding')} />
+
         </View>
 
         <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">

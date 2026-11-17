@@ -12,6 +12,7 @@ import { toast, useApp } from '@/lib/store';
 import { haptic, fonts } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
 import type { DetectedItem, StorageLocation } from '@/lib/types';
+import { quip } from '@/lib/quips';
 
 const NEXT: Record<StorageLocation, StorageLocation> = { fridge: 'freezer', freezer: 'pantry', pantry: 'fridge' };
 const LOC_LABEL: Record<StorageLocation, string> = { fridge: 'Fridge', freezer: 'Freezer', pantry: 'Pantry' };
@@ -32,7 +33,7 @@ export default function ScanReview() {
     Keyboard.dismiss();
     haptic.success();
     addDetectedItems(valid);
-    toast(`${valid.length} items stocked. Your Pantry thanks you!`);
+    toast(quip.stocked(valid.length));
     const counts: Record<StorageLocation, number> = { fridge: 0, freezer: 0, pantry: 0 };
     for (const item of valid) counts[item.location] += 1;
     const location = (['fridge', 'pantry', 'freezer'] as StorageLocation[]).sort((a, b) => counts[b] - counts[a])[0];

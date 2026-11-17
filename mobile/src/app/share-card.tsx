@@ -10,6 +10,7 @@ import { toast, useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
 import type { Recipe } from '@/lib/types';
+import { quip } from '@/lib/quips';
 
 const fmtQty = (q: number | null) => {
   if (q == null) return '';
@@ -96,7 +97,7 @@ export default function ShareCard() {
   const sendInApp = () => {
     if (sendRecipeToPartner(recipe.id)) {
       haptic.success();
-      toast(`Sent to ${partnerName ?? 'your partner'} 💌`);
+      toast(quip.sentRecipe(partnerName ?? 'your partner'));
       goBack();
     }
   };

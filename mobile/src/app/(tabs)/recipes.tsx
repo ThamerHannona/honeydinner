@@ -14,6 +14,7 @@ import { haptic } from '@/lib/theme';
 import { ConfirmDelete } from '@/components/confirm-delete';
 
 import type { SourcePlatform } from '@/lib/types';
+import { quip } from '@/lib/quips';
 
 const SOURCES: { id: SourcePlatform; label: string }[] = [
   { id: 'tiktok', label: 'TikTok' },
@@ -143,7 +144,7 @@ export default function RecipesScreen() {
           if (pendingDelete) {
             deleteRecipe(pendingDelete.id);
             haptic.success();
-            toast(`Deleted ${pendingDelete.title}`);
+            toast(quip.deleted(pendingDelete.title));
           }
           setPendingDelete(null);
         }}

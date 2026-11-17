@@ -11,6 +11,7 @@ import { formatQty } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
 import { fonts, haptic, shape } from '@/lib/theme';
 import type { Aisle, Member } from '@/lib/types';
+import { quip } from '@/lib/quips';
 
 const AISLES: Aisle[] = ['Produce', 'Meat & Fish', 'Pantry', 'Dairy', 'Frozen', 'Other'];
 
@@ -45,7 +46,7 @@ export default function GroceriesScreen() {
     addManualGrocery(name);
     setNewItem('');
     Keyboard.dismiss();
-    toast(`${name} added to your list`);
+    toast(quip.addedToList(name));
   };
 
   const openItems = groceries.filter((g) => !g.checked);
@@ -161,7 +162,7 @@ export default function GroceriesScreen() {
             ) : null}
           </View>
         ) : null}
-        <PressableScale testID={storeMode ? 'groceries-done-shopping' : 'groceries-start-shopping'} accessibilityRole="button" accessibilityLabel={storeMode ? 'Done shopping' : "I'm at the store"} onPress={() => { setStoreMode(!storeMode); Keyboard.dismiss(); if (storeMode) toast('Shopping finished. Your list is saved.'); }}>
+        <PressableScale testID={storeMode ? 'groceries-done-shopping' : 'groceries-start-shopping'} accessibilityRole="button" accessibilityLabel={storeMode ? 'Done shopping' : "I'm at the store"} onPress={() => { setStoreMode(!storeMode); Keyboard.dismiss(); if (storeMode) toast(quip.shoppingDone()); }}>
           <HardShadow color={C.honey} radius={999}><View className="items-center justify-center rounded-full" style={{ height: 57, backgroundColor: C.ink }}>
             <Txt weight="extrabold" style={{ fontSize: 16, color: C.cream }}>{storeMode ? 'Done shopping' : "I'm at the store"}</Txt>
           </View></HardShadow>

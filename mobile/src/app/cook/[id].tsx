@@ -20,6 +20,7 @@ import { decodeSharedUrl, ingestInbox, whenHydrated } from '@/lib/use-share-inbo
 import { importRecipe } from '@/lib/services/kitchen-ai';
 import type { RecipeDraft } from '@/lib/types';
 import { haptic } from '@/lib/theme';
+import { quip } from '@/lib/quips';
 
 const KEEP_AWAKE_TAG = 'cooking-mode';
 
@@ -240,7 +241,7 @@ export default function CookMode() {
               onPress={() => {
                 haptic.success();
                 usedUp.forEach((pid) => markUsed(pid));
-                toast(usedUp.length ? `Nailed it! Removed ${usedUp.length} from your kitchen.` : `${recipe.title} — nailed it!`);
+                toast(usedUp.length ? `Nailed it! Removed ${usedUp.length} from your kitchen. 🤌` : quip.cooked(recipe.title));
                 goBack();
               }}
             />

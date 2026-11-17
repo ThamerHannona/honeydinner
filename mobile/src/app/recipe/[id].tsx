@@ -13,6 +13,7 @@ import { formatIngredientAmount, isBasic, isStaple, matchRecipe, namesMatch, pan
 import { PLATFORM_LABEL } from '@/lib/services/kitchen-ai';
 import { toast, useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
+import { quip } from '@/lib/quips';
 
 export default function RecipeDetail() {
   const { C } = useTheme();
@@ -187,7 +188,7 @@ export default function RecipeDetail() {
           router.replace('/recipes');
           setTimeout(() => {
             deleteRecipe(recipe.id);
-            toast(`Deleted ${t}`);
+            toast(quip.deleted(t));
           }, 50);
         }}
       />
