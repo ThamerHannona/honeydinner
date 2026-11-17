@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Share, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { Heart, Image as ImageIcon, Send, X } from 'lucide-react-native';
@@ -101,18 +101,30 @@ export default function ShareCard() {
     }
   };
 
-  const sharePicture = async () => {
-    if (!cardRef.current) return;
+  const sendBoth = async () => {
+    const queued = sendRecipeToPartner(recipe.id);
+    if (queued) haptic.success();
+    const shared = await sharePicture();
+    if (queued) {
+      toast(shared ? `Sent to ${partnerName ?? 'your partner'} — in the app and by text 💌` : `Sent to ${partnerName ?? 'your partner'} in the app 💌`);
+      goBack();
+    }
+  };
+
+  const sharePicture = async (): Promise<boolean> => {
+    if (!cardRef.current) return false;
     setBusy(true);
     try {
       const uri = await captureRef(cardRef, { format: 'jpg', quality: 0.9, result: 'tmpfile' });
       const link = recipe.source?.url;
-      await Share.share({
+      const res = await Share.share({
         url: uri,
         message: `${partnerName ? `${partnerName}, ` : ''}dinner tonight? ${recipe.title} 🍽️${link ? `\n${link}` : ''}`,
       });
+      return res.action === Share.sharedAction;
     } catch {
       toast('Couldn\'t make the picture. Try again.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -135,16 +147,42 @@ export default function ShareCard() {
 
       <View className="px-5" style={{ paddingBottom: insets.bottom + 12, paddingTop: 10, gap: 10 }}>
         {sharedKitchen ? (
-          <Button testID="share-card-in-app" label={`Send to ${partnerName ?? 'partner'} in the app`} icon={<Send size={19} color={C.paper} />} onPress={sendInApp} />
-        ) : null}
-        <Button
-          testID="share-card-picture"
-          variant={sharedKitchen ? 'outline' : undefined}
-          label={busy ? 'Making picture…' : 'Share as picture'}
-          icon={busy || !ready ? <ActivityIndicator color={sharedKitchen ? C.ink : C.paper} /> : <ImageIcon size={19} color={sharedKitchen ? C.ink : C.paper} />}
-          onPress={() => void sharePicture()}
-          disabled={busy}
-        />
+          <>
+            {/* One tap: lands in their app AND opens the text, so they get it either way */}
+            <Button
+              testID="share-card-both"
+              label={busy ? 'Making picture…' : `Send to ${partnerName ?? 'partner'} · app + text`}
+              icon={busy ? <ActivityIndicator color={C.paper} /> : <Send size={19} color={C.paper} />}
+              onPress={() => void sendBoth()}
+              disabled={busy}
+            />
+            <View className="flex-row" style={{ gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button testID="share-card-in-app" variant="outline" label="App only" onPress={sendInApp} disabled={busy} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button testID="share-card-picture" variant="outline" label="Text only" onPress={() => void sharePicture()} disabled={busy} />
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            <Button
+              testID="share-card-picture"
+              label={busy ? 'Making picture…' : 'Share as picture'}
+              icon={busy || !ready ? <ActivityIndicator color={C.paper} /> : <ImageIcon size={19} color={C.paper} />}
+              onPress={() => void sharePicture()}
+              disabled={busy}
+            />
+            {partnerName ? (
+              <PressableScale testID="share-card-connect" accessibilityRole="button" onPress={() => router.push('/invite')}>
+                <Txt weight="bold" className="text-center text-[13px]" style={{ color: C.inkSoft }}>
+                  Want it to land in {partnerName}’s app too? <Txt weight="extrabold" style={{ color: C.leafDark }}>Connect your kitchens →</Txt>
+                </Txt>
+              </PressableScale>
+            ) : null}
+          </>
+        )}
       </View>
     </View>
   );
