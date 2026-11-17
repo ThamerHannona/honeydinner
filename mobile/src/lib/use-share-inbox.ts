@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { router } from 'expo-router';
-import { drainInbox } from './share-inbox';
+import { drainInbox, writeShareSettings } from './share-inbox';
 import { toast, useApp } from './store';
 import { PLATFORM_LABEL } from './services/kitchen-ai';
 
@@ -38,6 +38,13 @@ export async function ingestInbox(): Promise<{ lastId: string | null; hasLink: b
 }
 
 export function useShareInbox() {
+  // keep the share panel's copy of the recipe-language setting current
+  useEffect(() => {
+    whenHydrated(() => writeShareSettings({ lang: useApp.getState().recipeLanguage }));
+    return useApp.subscribe((st, prev) => {
+      if (st.recipeLanguage !== prev.recipeLanguage) writeShareSettings({ lang: st.recipeLanguage });
+    });
+  }, []);
   useEffect(() => {
     whenHydrated(() => { void ingestInbox(); });
     const sub = AppState.addEventListener('change', (s) => {

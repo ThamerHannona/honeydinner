@@ -42,7 +42,7 @@ const headers = () => {
 
 const daysLeft = (iso: string | null) => (iso ? Math.round((new Date(iso).getTime() - Date.now()) / 86400000) : null);
 
-export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryItem[]; servings: number; avoid: string[]; mood?: string }): Promise<GenieIdea[]> {
+export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryItem[]; servings: number; avoid: string[]; mood?: string; lang?: string }): Promise<GenieIdea[]> {
   const res = await fetch(`${base()}/functions/v1/genie-recipes`, {
     method: 'POST',
     headers: headers(),
@@ -51,6 +51,7 @@ export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryIt
       servings: opts.servings,
       avoid: opts.avoid.slice(0, 50),
       mood: opts.mood ?? '',
+      lang: opts.lang ?? 'en',
       pantry: opts.pantry.map((p) => ({ name: p.name, location: p.location, daysLeft: daysLeft(p.expiresAt) })),
     }),
   });

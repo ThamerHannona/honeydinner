@@ -10,13 +10,20 @@ import type { Member } from '@/lib/types';
 type Weight = 'regular' | 'semibold' | 'bold' | 'extrabold';
 const BODY: Record<Weight, string> = { regular: fonts.body, semibold: fonts.semibold, bold: fonts.bold, extrabold: fonts.bold };
 
+const RTL_CHARS = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+
 export function Txt({ weight = 'regular', display = false, label = false, italic = false, className, style, ...rest }: TextProps & { weight?: Weight; display?: boolean; label?: boolean; italic?: boolean; className?: string }) {
   const flat = StyleSheet.flatten(style);
   const isLabel = !display && (label || className?.split(' ').includes('uppercase') || flat?.textTransform === 'uppercase');
   const isItalic = italic || flat?.fontStyle === 'italic';
   const font = display ? isItalic ? fonts.displayItalic : fonts.display : isLabel ? weight === 'extrabold' ? fonts.logo : fonts.label : BODY[weight];
+  // Arabic (or Hebrew/Persian) recipe text reads right-to-left: align it to the right
+  // unless the layout explicitly centers it.
+  const firstText = typeof rest.children === 'string' ? rest.children : Array.isArray(rest.children) && typeof rest.children[0] === 'string' ? rest.children[0] : '';
+  const rtl = !!firstText && RTL_CHARS.test(firstText);
+  const rtlStyle = rtl ? { writingDirection: 'rtl' as const, textAlign: flat?.textAlign === 'center' || className?.includes('text-center') ? ('center' as const) : ('right' as const) } : null;
   return <Text {...rest} className={cn('text-ink text-base', className)} style={[
-    { fontFamily: display || isLabel ? font : Platform.OS === 'ios' ? 'System' : 'sans-serif', fontWeight: display || isLabel ? undefined : weight === 'regular' ? '400' : weight === 'semibold' ? '600' : '700' }, isLabel && { ...typography.badge }, style,
+    { fontFamily: display || isLabel ? font : Platform.OS === 'ios' ? 'System' : 'sans-serif', fontWeight: display || isLabel ? undefined : weight === 'regular' ? '400' : weight === 'semibold' ? '600' : '700' }, isLabel && { ...typography.badge }, style, rtlStyle,
     // Use the real italic face rather than synthetic italic on serif headlines.
     display && isItalic && { fontFamily: fonts.displayItalic, fontStyle: 'normal' },
   ]} />;

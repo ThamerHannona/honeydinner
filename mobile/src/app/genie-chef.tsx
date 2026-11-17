@@ -52,6 +52,7 @@ export default function GenieChef() {
         servings: Math.max(2, members.length),
         avoid: [...recipes.map((r) => r.title), ...ideas.map((i) => i.title)],
         mood: mood ?? undefined,
+        lang: useApp.getState().recipeLanguage,
       }),
     onSuccess: (list) => {
       haptic.success();

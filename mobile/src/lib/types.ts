@@ -1,5 +1,8 @@
 export type SourcePlatform = 'tiktok' | 'instagram' | 'facebook' | 'snapchat' | 'web' | 'photo' | 'genie';
 
+/** Language imported / generated recipes are written in. */
+export type RecipeLanguage = 'en' | 'ar' | 'es' | 'original';
+
 /** Eating styles FridgeGenie cooks for. */
 export type Diet =
   | 'carnivore' | 'keto' | 'atkins' | 'paleo' | 'mediterranean' | 'low-fat' | 'low-carb' | 'high-protein' | 'whole30'

@@ -1,3 +1,4 @@
+import { useApp } from '@/lib/store';
 import { guessEmoji } from '../kitchen';
 import type { DetectedItem, Ingredient, RecipeDraft, SourcePlatform } from '../types';
 
@@ -125,7 +126,7 @@ export async function importRecipe(
           apikey: supabaseAnonKey,
           authorization: `Bearer ${supabaseAnonKey}`,
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, lang: useApp.getState().recipeLanguage ?? 'en' }),
       });
       if (!res.ok) throw new Error('Import failed');
       const data = (await res.json().catch(() => null)) as null | { recipe?: RecipeDraft };

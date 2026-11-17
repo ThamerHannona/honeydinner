@@ -7,6 +7,7 @@
 //   servings?: number          default 2
 //   avoid?: string[]           titles already suggested / in the recipe box
 //   mood?: string              optional free text ("quick", "comfort food", …)
+//   lang?: "en"|"ar"|"es"      language to write the ideas in (default en)
 // }
 // → { recipes: [{ title, blurb, servings, cookTime, ingredients:[{name,qty,unit,have}], steps:[], uses:[], tags:[] }] }
 // Secrets: OPENAI_API_KEY.
@@ -61,6 +62,11 @@ Deno.serve(async (req) => {
     const servings = Math.min(12, Math.max(1, Math.round(Number(body.servings) || 2)));
     const avoid = (Array.isArray(body.avoid) ? body.avoid : []).slice(0, 60).map((t) => clean(t, 80)).filter(Boolean);
     const mood = clean(body.mood, 140);
+    const lang = ["en", "ar", "es", "original"].includes(String(body.lang)) ? String(body.lang) : "en";
+    const LANG_RULE: Record<string, string> = {
+      ar: "Write title, blurb, tags, ingredient names and steps in clear, simple Arabic. Keep units as short Latin abbreviations (g, cup, tbsp) and quantities as numbers.",
+      es: "Write title, blurb, tags, ingredient names and steps in Spanish. Keep units as short abbreviations and quantities as numbers.",
+    };
 
     const byLoc = (loc: string) =>
       pantry.filter((p) => p.location === loc).map((p) => (p.daysLeft !== null && p.daysLeft <= 3 ? `${p.name} (use within ${Math.max(0, p.daysLeft)}d!)` : p.name)).join(", ") || "(empty)";
@@ -78,7 +84,8 @@ Deno.serve(async (req) => {
       "- ingredients: qty as a number (0.5 not 1/2) or null; unit short (g, kg, ml, cup, tbsp, tsp, oz, lb, clove, can, pinch) or \"\" for whole items. Scale to the servings requested.\n" +
       "- steps: 5–9 short imperative steps, one action each, with times and heat levels.\n" +
       "- uses: names of inventory items the recipe uses. tags: 1–3 short labels like the diet, 'One pan', '20 min'.\n" +
-      "- Never repeat a dish from the 'avoid' list.";
+      "- Never repeat a dish from the 'avoid' list.\n" +
+      "- Kitchen items may be named in English, Arabic or Spanish — treat them as the same foods.";
 
     const user = [
       `Servings: ${servings}`,
@@ -88,6 +95,7 @@ Deno.serve(async (req) => {
       `FREEZER: ${byLoc("freezer")}`,
       `PANTRY: ${byLoc("pantry")}`,
       avoid.length ? `Avoid these dishes: ${avoid.join("; ")}` : "",
+      LANG_RULE[lang] ? `Language: ${LANG_RULE[lang]}` : "Language: English.",
     ].filter(Boolean).join("\n");
 
     let parsed: any = null;
@@ -131,7 +139,7 @@ Deno.serve(async (req) => {
     })).filter((r: any) => r.title && r.ingredients.length && r.steps.length);
 
     if (!recipes.length) return json({ error: "FridgeGenie couldn't think of anything. Add a few items and try again." }, 422);
-    console.log("[genie-recipes] ok", diets.join(",") || "none", pantry.length, "items →", recipes.map((r: any) => r.title).join(" | "));
+    console.log("[genie-recipes] ok", diets.join(",") || "none", lang, pantry.length, "items →", recipes.map((r: any) => r.title).join(" | "));
     return json({ recipes });
   } catch (e) {
     console.log("[genie-recipes] error", String(e));

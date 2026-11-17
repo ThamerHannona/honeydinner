@@ -605,7 +605,14 @@ class ShareExtensionViewController: UIViewController {
     req.setValue(key, forHTTPHeaderField: "apikey")
     req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
     req.timeoutInterval = 90
-    req.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url], options: [])
+    var lang = "en"
+    if let sURL = containerURL()?.appendingPathComponent("hd-settings.json"),
+       let sData = try? Data(contentsOf: sURL),
+       let sObj = try? JSONSerialization.jsonObject(with: sData) as? [String: Any],
+       let l = sObj["lang"] as? String, ["en", "ar", "es", "original"].contains(l) {
+      lang = l
+    }
+    req.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url, "lang": lang], options: [])
 
     importTask = URLSession.shared.dataTask(with: req) { [weak self] data, resp, err in
       guard let self else { return }

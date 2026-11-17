@@ -7,6 +7,7 @@ import type {
   DetectedItem,
   Diet,
   GroceryItem,
+  RecipeLanguage,
   Household,
   Ingredient,
   Member,
@@ -31,6 +32,7 @@ interface AppState {
   household: Household | null;
   diets: Diet[];
   expiryNudges: boolean;
+  recipeLanguage: RecipeLanguage;
 
   // ephemeral drafts (not persisted)
   importDraft: RecipeDraft | null;
@@ -69,6 +71,7 @@ interface AppState {
 
   setDiets: (d: Diet[]) => void;
   setExpiryNudges: (on: boolean) => void;
+  setRecipeLanguage: (l: RecipeLanguage) => void;
   setHousehold: (h: Household | null) => void;
   patchHousehold: (p: Partial<Household>) => void;
   /** Apply records that came down from the shared kitchen. */
@@ -116,6 +119,7 @@ export const useApp = create<AppState>()(
       household: null,
       diets: [],
       expiryNudges: true,
+      recipeLanguage: 'en',
       importDraft: null,
       scanDraft: [],
       ...seedState(),
@@ -312,6 +316,7 @@ export const useApp = create<AppState>()(
 
       setDiets: (d) => set({ diets: d }),
       setExpiryNudges: (on) => set({ expiryNudges: on }),
+      setRecipeLanguage: (l) => set({ recipeLanguage: l }),
       setHousehold: (h) => set({ household: h }),
       patchHousehold: (p) => set((s) => (s.household ? { household: { ...s.household, ...p } } : {})),
       applyRemote: (records) =>
@@ -423,6 +428,7 @@ export const useApp = create<AppState>()(
         household: s.household,
         diets: s.diets,
         expiryNudges: s.expiryNudges,
+        recipeLanguage: s.recipeLanguage,
       }),
       onRehydrateStorage: () => () => {
         useApp.setState((s) => ({ hydrated: true, recipes: dedupeRecipes(s.recipes) }));

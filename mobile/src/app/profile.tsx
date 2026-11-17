@@ -1,4 +1,5 @@
 import { DIETS } from '@/lib/services/genie-recipes';
+import type { RecipeLanguage } from '@/lib/types';
 import { useTheme } from '@/lib/theme-context';
 import React, { useState } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
@@ -122,6 +123,11 @@ export default function Profile() {
         </View>
 
         <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">
+          Recipe language
+        </Txt>
+        <LanguagePicker />
+
+        <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">
           Appearance
         </Txt>
         <AppearancePicker />
@@ -189,6 +195,35 @@ export default function Profile() {
           </ScrollView>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+const LANGS: { id: RecipeLanguage; label: string; hint: string }[] = [
+  { id: 'en', label: 'English', hint: 'Recipes in any language are translated to English.' },
+  { id: 'ar', label: 'العربية', hint: 'Recipes in any language are written in Arabic.' },
+  { id: 'es', label: 'Español', hint: 'Recipes in any language are written in Spanish.' },
+  { id: 'original', label: 'Original', hint: 'Keep each recipe in the language of the post.' },
+];
+
+function LanguagePicker() {
+  const { C } = useTheme();
+  const lang = useApp((s) => s.recipeLanguage);
+  const setLang = useApp((s) => s.setRecipeLanguage);
+  return (
+    <View testID="language-picker" accessibilityLabel="Recipe language" style={{ backgroundColor: C.paper, borderRadius: 16, padding: 6 }}>
+      <View accessibilityRole="radiogroup" className="flex-row" style={{ gap: 6 }}>
+        {LANGS.map((o) => (
+          <PressableScale haptics={false} key={o.id} testID={`language-${o.id}`} accessibilityRole="radio" accessibilityLabel={o.label} accessibilityState={{ checked: lang === o.id }} onPress={() => { haptic.select(); setLang(o.id); }} style={{ flex: 1 }}>
+            <View style={{ minHeight: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: lang === o.id ? C.ink : C.transparent }}>
+              <Txt weight="bold" style={{ color: lang === o.id ? C.cream : C.ink, fontSize: 14 }}>{o.label}</Txt>
+            </View>
+          </PressableScale>
+        ))}
+      </View>
+      <Txt className="px-2 pb-2 pt-3 text-[12px]" style={{ color: C.inkFaint }} accessibilityLiveRegion="polite">
+        {LANGS.find((o) => o.id === lang)?.hint} Works with TikTok, Instagram and websites in Arabic, Spanish and more.
+      </Txt>
     </View>
   );
 }

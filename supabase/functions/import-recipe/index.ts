@@ -115,7 +115,12 @@ async function getText(url: string, ms = 12_000): Promise<{ html: string; finalU
 }
 
 const decodeEntities = (s: string) =>
-  s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return ""; } })
+    .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return ""; } })
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/[\u200e\u200f\u202a-\u202e]/g, ""); // invisible LTR/RTL marks
 
 function metaTag(html: string, prop: string): string | null {
   const re = new RegExp(
@@ -220,6 +225,27 @@ async function genericFromPage(url: string, info: PostInfo) {
   if (vid?.startsWith("http")) info.videoUrls.push(vid);
 }
 
+/** Instagram's public embed page carries the full caption (og:description is cut short). */
+async function instagramFromEmbed(url: string, info: PostInfo) {
+  const m = url.match(/instagram\.com\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i);
+  if (!m) return;
+  const page = await getText(`https://www.instagram.com/p/${m[1]}/embed/captioned/`, 10_000);
+  if (!page) return;
+  const cap = page.html.match(/<div class="Caption"[^>]*>([\s\S]*?)<div class="CaptionComments"/i)?.[1]
+    ?? page.html.match(/<div class="Caption"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i)?.[1];
+  if (cap) {
+    const text = decodeEntities(cap.replace(/<br\s*\/?>/gi, "\n").replace(/<a [^>]*class="CaptionUsername"[^>]*>[\s\S]*?<\/a>/i, "").replace(/<[^>]+>/g, " "))
+      .replace(/[ \t]+/g, " ").replace(/\n\s+/g, "\n").trim();
+    if (text.length > info.caption.length) info.caption = text;
+  }
+  const vid = page.html.match(/\\?"video_url\\?":\s*\\?"([^"\\]+(?:\\\/[^"\\]+)*)/)?.[1];
+  if (vid) info.videoUrls.push(vid.replace(/\\\//g, "/").replace(/\\u0026/g, "&"));
+  if (!info.creator) {
+    const u = page.html.match(/class="UsernameText"[^>]*>([^<]+)</i)?.[1];
+    if (u) info.creator = `@${u.trim()}`;
+  }
+}
+
 async function getPostInfo(url: string): Promise<PostInfo> {
   const platform = detectPlatform(url);
   const info: PostInfo = { url, platform, caption: "", creator: null, thumbnail: null, videoUrls: [], structured: null };
@@ -229,6 +255,7 @@ async function getPostInfo(url: string): Promise<PostInfo> {
     if (!info.caption || !info.thumbnail) await tiktokFromOembed(info.url, info);
   } else {
     await genericFromPage(url, info);
+    if (platform === "instagram") await instagramFromEmbed(url, info);
   }
   info.caption = info.caption.trim().slice(0, 4_000);
   info.videoUrls = [...new Set(info.videoUrls)];
@@ -286,15 +313,24 @@ or {"ok":false,"reason":string} ONLY if the post is clearly not about food at al
 Rules:
 - Use everything the post actually says or shows first: spoken words, on-screen text, caption, recipe card.
 - If the post names or shows a dish but leaves out amounts, ingredients or steps, fill the gaps with a classic, reliable home-cook version of THAT dish, consistent with what is shown, and set "estimated": true. Never return an empty ingredient list or empty steps.
-- Title: the dish name in Title Case. No hashtags, emoji, @handles, bullets or "recipe"/"easy" filler.
+- Title: the dish name (Title Case for Latin-script languages). No hashtags, emoji, @handles, bullets or "recipe"/"easy" filler.
 - Ingredients: real foods only. Never hashtags, usernames or words like "cooking" or "foodie". qty is a number (0.5 not "1/2") or null; unit is short (g, kg, ml, cup, tbsp, tsp, oz, lb, clove, can, pinch) or "" for whole items.
 - Steps: 4–10 short imperative steps, one action each, with times and heat where relevant ("Cook 5 min over medium-high heat").
-- cookTime: total minutes. servings: number of people.`;
+- cookTime: total minutes. servings: number of people.
+- The post may be in any language — Arabic (any dialect: Gulf, Levantine, Egyptian, Iraqi, Maghrebi), Spanish, or others, sometimes mixed with English. Read and understand all of it; Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) are numbers.`;
+
+const LANGUAGE: Record<string, string> = {
+  en: "Write the title, ingredient names and steps in English (translate if the post is in another language). Keep well-known dish names recognisable (e.g. 'Maqluba (Upside-Down Rice)').",
+  ar: "Write the title, ingredient names and steps in clear, simple Arabic (Modern Standard Arabic as used in home recipes). Keep units as short Latin abbreviations (g, kg, ml, cup, tbsp, tsp) and quantities as numbers.",
+  es: "Write the title, ingredient names and steps in Spanish (neutral Latin-American Spanish). Keep units as short abbreviations (g, kg, ml, cup, tbsp, tsp) and quantities as numbers.",
+  original: "Write the title, ingredient names and steps in the same language the post uses (if it mixes languages, use the main one). Keep units as short Latin abbreviations and quantities as numbers.",
+};
+const rules = (lang: string) => `${RECIPE_RULES}\n- Language: ${LANGUAGE[lang] ?? LANGUAGE.en}`;
 
 function sanitize(raw: any): Extracted | null {
   const r = raw?.recipe ?? raw;
   if (!r || typeof r !== "object") return null;
-  const clean = (s: string) => s.replace(/[#@][\w.]+/g, "").replace(/[•·|]+/g, " ").replace(/\s+/g, " ").trim();
+  const clean = (s: string) => s.replace(/[#@][\p{L}\p{N}_.]+/gu, "").replace(/[•·|]+/g, " ").replace(/\s+/g, " ").trim();
   const title = clean(String(r.title ?? "")).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/gu, "");
   const ingredients: Ingredient[] = (Array.isArray(r.ingredients) ? r.ingredients : [])
     .map((i: any) => {
@@ -345,7 +381,7 @@ function describePost(info: PostInfo, transcript: string | null): string {
   ].join("\n");
 }
 
-async function withGemini(info: PostInfo, video: Uint8Array): Promise<Extracted | null> {
+async function withGemini(info: PostInfo, video: Uint8Array, lang: string): Promise<Extracted | null> {
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) return null;
   const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
@@ -361,7 +397,7 @@ async function withGemini(info: PostInfo, video: Uint8Array): Promise<Extracted 
             parts: [
               { inline_data: { mime_type: "video/mp4", data: encodeBase64(video) } },
               {
-                text: `${RECIPE_RULES}\n\nWatch the whole video. Read every on-screen text overlay and listen to the voice-over; ` +
+                text: `${rules(lang)}\n\nWatch the whole video. Read every on-screen text overlay and listen to the voice-over; ` +
                   `also look at what is added to the pan or bowl.\n\n${describePost(info, null)}`,
               },
             ],
@@ -383,13 +419,29 @@ async function withGemini(info: PostInfo, video: Uint8Array): Promise<Extracted 
   }
 }
 
-async function withOpenAI(info: PostInfo, transcript: string | null): Promise<Extracted | null> {
+async function imageAsDataUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetchWithTimeout(url, { headers: { referer: "https://www.instagram.com/" } }, 8_000);
+    if (!res.ok) return null;
+    const type = (res.headers.get("content-type") ?? "image/jpeg").split(";")[0];
+    if (!/^image\/(jpeg|jpg|png|webp|gif)$/i.test(type)) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength < 1000 || buf.byteLength > 4_000_000) return null;
+    return `data:${type};base64,${encodeBase64(buf)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function withOpenAI(info: PostInfo, transcript: string | null, lang: string): Promise<Extracted | null> {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) return null;
   const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+  const cover = await imageAsDataUrl(info.thumbnail);
   const ask = async (withImage: boolean) => {
     const content: any[] = [{ type: "text", text: `${describePost(info, transcript)}\n\nThe image (if any) is the video's cover frame — read any text on it.` }];
-    if (withImage && info.thumbnail) content.push({ type: "image_url", image_url: { url: info.thumbnail, detail: "low" } });
+    if (withImage && (cover ?? info.thumbnail)) content.push({ type: "image_url", image_url: { url: cover ?? info.thumbnail, detail: cover ? "high" : "low" } });
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
@@ -397,7 +449,7 @@ async function withOpenAI(info: PostInfo, transcript: string | null): Promise<Ex
         model,
         temperature: 0.2,
         response_format: { type: "json_object" },
-        messages: [{ role: "system", content: RECIPE_RULES }, { role: "user", content }],
+        messages: [{ role: "system", content: rules(lang) }, { role: "user", content }],
       }),
     });
     if (!res.ok) { log("openai http", res.status, (await res.text().catch(() => "")).slice(0, 200)); return null; }
@@ -457,8 +509,10 @@ Deno.serve(async (req) => {
     }
     const body = await req.json().catch(() => null) as any;
     const url = normalizeUrl(typeof body?.url === "string" ? body.url : "");
+    const LANG: string = ["en", "ar", "es", "original"].includes(body?.lang) ? body.lang : "en";
+    const cacheKey = LANG === "en" ? url : `${url}#lang=${LANG}`;
 
-    const cached = body?.fresh ? null : await cacheGet(url);
+    const cached = body?.fresh ? null : await cacheGet(cacheKey);
     if (cached) {
       log("cache hit", url);
       return json({ recipe: cached.recipe, method: cached.method });
@@ -470,7 +524,7 @@ Deno.serve(async (req) => {
       throw new UserFacingError("Couldn't open that post. It may be private.");
     }
 
-    const maxBytes = Number(Deno.env.get("MAX_VIDEO_BYTES") ?? "18000000");
+    const maxBytes = Number(Deno.env.get("MAX_VIDEO_BYTES") ?? "24000000");
     const needVideo = !info.structured; // a site's recipe card beats any video
     const video = needVideo && info.videoUrls.length ? await downloadVideo(info.videoUrls, maxBytes) : null;
     log("video bytes", video?.byteLength ?? 0);
@@ -478,16 +532,16 @@ Deno.serve(async (req) => {
     let recipe: Extracted | null = null;
     let method = "";
     if (video) {
-      recipe = await withGemini(info, video);
+      recipe = await withGemini(info, video, LANG);
       if (recipe) method = "gemini-video";
     }
     if (!recipe) {
       const transcript = video ? await transcribe(video) : null;
-      recipe = await withOpenAI(info, transcript);
+      recipe = await withOpenAI(info, transcript, LANG);
       if (recipe) method = transcript ? "openai-transcript" : "openai-caption";
     }
     if (!recipe) throw new UserFacingError("Couldn't find the recipe in that post.");
-    log("done", method, recipe.title, { ingredients: recipe.ingredients.length, steps: recipe.steps.length, estimated: recipe.estimated });
+    log("done", method, LANG, recipe.title, { ingredients: recipe.ingredients.length, steps: recipe.steps.length, estimated: recipe.estimated });
 
     const draft: RecipeDraft = {
       title: recipe.title,
@@ -499,7 +553,7 @@ Deno.serve(async (req) => {
       source: { platform: info.platform, url: info.url, creator: info.creator },
       ...(recipe.estimated ? { note: ESTIMATED_NOTE } : {}),
     };
-    await cachePut([url, info.url], draft, method);
+    await cachePut(LANG === "en" ? [url, info.url] : [cacheKey, `${info.url}#lang=${LANG}`], draft, method);
     return json({ recipe: draft, method });
   } catch (e) {
     const message = e instanceof UserFacingError ? e.message : "Import failed";

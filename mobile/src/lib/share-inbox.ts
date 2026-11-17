@@ -103,3 +103,16 @@ export async function drainInbox(): Promise<Pending> {
   const native = await readNativeInbox();
   return merge(mmkv, native);
 }
+
+/** Settings the native share panel reads (it can't see the app's storage). */
+export function writeShareSettings(settings: { lang: string }) {
+  try {
+    const dir = appGroupDir();
+    if (!dir) return;
+    const f = new File(dir, 'hd-settings.json');
+    if (!f.exists) f.create();
+    f.write(JSON.stringify(settings));
+  } catch {
+    /* App Group unavailable — the panel falls back to English */
+  }
+}
