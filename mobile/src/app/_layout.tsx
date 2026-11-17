@@ -18,6 +18,7 @@ import { useApp } from '@/lib/store';
 import { useShareInbox } from '@/lib/use-share-inbox';
 import { ThemeProvider, themeVariables, useTheme } from '@/lib/theme-context';
 import { useHouseholdSync } from '@/lib/household';
+import { useExpiryNudges } from '@/lib/expiry-nudges';
 
 export const unstable_settings = { initialRouteName: '(tabs)' };
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -26,6 +27,7 @@ const queryClient = new QueryClient();
 function ShareInboxListener() {
   useShareInbox();
   useHouseholdSync();
+  useExpiryNudges();
   return null;
 }
 

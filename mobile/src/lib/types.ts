@@ -96,6 +96,9 @@ export interface HouseholdMember {
 }
 export interface SentRecipe {
   id: string;
+  /** 'recipe' (default) or a 'pickup' request for grocery items. */
+  type?: 'recipe' | 'pickup';
+  items?: string[];
   recipeId: string;
   title: string;
   from: string;

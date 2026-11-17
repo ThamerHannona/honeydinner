@@ -23,7 +23,8 @@ export default function Profile() {
   const renameMember = useApp((s) => s.renameMember);
   const clearKitchen = useApp((s) => s.clearKitchen);
   const signOut = useApp((s) => s.signOut);
-  const [expiryAlerts, setExpiryAlerts] = useState<boolean>(true);
+  const expiryAlerts = useApp((s) => s.expiryNudges);
+  const setExpiryAlerts = useApp((s) => s.setExpiryNudges);
   const [voteAlerts, setVoteAlerts] = useState<boolean>(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');

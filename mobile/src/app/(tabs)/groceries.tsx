@@ -1,15 +1,15 @@
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
 import React, { useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, TextInput, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, Share, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { Check, Plus } from 'lucide-react-native';
+import { Check, MessageCircle, Plus, ShoppingBasket } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/app';
 import { PressableScale, Txt, HardShadow } from '@/components/ui';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { formatQty } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
-import { fonts, shape } from '@/lib/theme';
+import { fonts, haptic, shape } from '@/lib/theme';
 import type { Aisle, Member } from '@/lib/types';
 
 const AISLES: Aisle[] = ['Produce', 'Meat & Fish', 'Pantry', 'Dairy', 'Frozen', 'Other'];
@@ -32,6 +32,9 @@ export default function GroceriesScreen() {
   const toggleGrocery = useApp((s) => s.toggleGrocery);
   // The existing manual-add store action also handles aisle guessing and duplicates.
   const addManualGrocery = useApp((s) => s.addGrocery);
+  const requestPickup = useApp((s) => s.requestPickup);
+  const partnerInKitchen = useApp((s) => (s.household ? s.household.members.find((m) => m.memberId !== s.household?.memberId)?.name ?? null : null));
+  const partnerName = members.find((m) => !m.isMe)?.name ?? partnerInKitchen;
   const [newItem, setNewItem] = useState<string>('');
   const [storeMode, setStoreMode] = useState<boolean>(false);
   const remaining = groceries.filter((item) => !item.checked).length;
@@ -43,6 +46,31 @@ export default function GroceriesScreen() {
     setNewItem('');
     Keyboard.dismiss();
     toast(`${name} added to your list`);
+  };
+
+  const openItems = groceries.filter((g) => !g.checked);
+  const textList = async () => {
+    if (!openItems.length) return;
+    const lines: string[] = [`🛒 Can you grab these?`];
+    for (const aisle of AISLES) {
+      const rows = openItems.filter((g) => g.aisle === aisle);
+      if (!rows.length) continue;
+      lines.push('', aisle);
+      for (const g of rows) lines.push(`◻️ ${g.name}${g.qty !== null || g.unit ? ` — ${[g.qty === null ? '' : formatQty(g.qty), g.unit].filter(Boolean).join(' ')}` : ''}`);
+    }
+    lines.push('', 'Thank you! 🙏  — Honey, Dinner?');
+    haptic.tap();
+    try {
+      await Share.share({ message: lines.join('\n') });
+    } catch {
+      /* dismissed */
+    }
+  };
+  const askPartner = () => {
+    if (requestPickup(openItems.map((g) => g.name))) {
+      haptic.success();
+      toast(`Asked ${partnerInKitchen ?? 'your partner'} to grab ${openItems.length} thing${openItems.length === 1 ? '' : 's'} 🛒`);
+    }
   };
 
   return (
@@ -115,6 +143,24 @@ export default function GroceriesScreen() {
         ) : null}
       </ScrollView>
       <View className="px-5 pb-4 pt-3" testID="groceries-shopping-actions">
+        {remaining > 0 && !storeMode ? (
+          <View className="mb-3 flex-row" style={{ gap: 10 }}>
+            <PressableScale testID="groceries-text-list" accessibilityRole="button" accessibilityLabel="Text the list" style={{ flex: 1 }} onPress={() => void textList()}>
+              <View className="h-12 flex-row items-center justify-center rounded-full" style={{ gap: 7, borderWidth: 1.5, borderColor: C.ink, backgroundColor: C.paper }}>
+                <MessageCircle size={17} color={C.ink} />
+                <Txt weight="extrabold" style={{ fontSize: 14 }}>Text the list</Txt>
+              </View>
+            </PressableScale>
+            {partnerInKitchen ? (
+              <PressableScale testID="groceries-ask-partner" accessibilityRole="button" accessibilityLabel={`Ask ${partnerInKitchen} to grab these`} style={{ flex: 1.2 }} onPress={askPartner}>
+                <View className="h-12 flex-row items-center justify-center rounded-full" style={{ gap: 7, backgroundColor: C.honey, borderWidth: 1.5, borderColor: C.ink }}>
+                  <ShoppingBasket size={17} color={C.onHoney} />
+                  <Txt weight="extrabold" style={{ fontSize: 14, color: C.onHoney }} numberOfLines={1}>Ask {partnerName ?? partnerInKitchen} to grab</Txt>
+                </View>
+              </PressableScale>
+            ) : null}
+          </View>
+        ) : null}
         <PressableScale testID={storeMode ? 'groceries-done-shopping' : 'groceries-start-shopping'} accessibilityRole="button" accessibilityLabel={storeMode ? 'Done shopping' : "I'm at the store"} onPress={() => { setStoreMode(!storeMode); Keyboard.dismiss(); if (storeMode) toast('Shopping finished. Your list is saved.'); }}>
           <HardShadow color={C.honey} radius={999}><View className="items-center justify-center rounded-full" style={{ height: 57, backgroundColor: C.ink }}>
             <Txt weight="extrabold" style={{ fontSize: 16, color: C.cream }}>{storeMode ? 'Done shopping' : "I'm at the store"}</Txt>

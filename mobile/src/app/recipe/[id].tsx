@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronLeft, ExternalLink, Heart, Minus, Plus, Send, Trash2 } from 'lucide-react-native';
 import { ConfirmDelete } from '@/components/confirm-delete';
 import { Button, PressableScale, Txt } from '@/components/ui';
-import { formatIngredientAmount, isBasic, matchRecipe, namesMatch, pantryHas } from '@/lib/kitchen';
+import { formatIngredientAmount, isBasic, isStaple, matchRecipe, namesMatch, pantryHas } from '@/lib/kitchen';
 import { PLATFORM_LABEL } from '@/lib/services/kitchen-ai';
 import { toast, useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
@@ -130,16 +130,27 @@ export default function RecipeDetail() {
           {section === 'ingredients' ? (
             <View testID="ingredient-list">
               {recipe.ingredients.map((ing, i) => {
-                const have = pantryHas(pantry, ing.name);
                 const basic = isBasic(ing.name);
+                const staple = !basic && isStaple(ing.name);
+                const tracked = !basic && pantry.some((p) => namesMatch(p.name, ing.name));
+                const have = basic || tracked || pantryHas(pantry, ing.name);
+                const assumed = (basic || staple) && !tracked;
+                const onList = groceries.some((g) => !g.checked && namesMatch(g.name, ing.name));
                 return (
-                  <View key={`${ing.name}-${i}`} testID={`recipe-ingredient-${i}`} accessibilityLabel={`${ing.name}, ${formatIngredientAmount(ing, scale)}, ${have ? 'in kitchen' : basic ? 'basic ingredient' : 'needed'}`} className="min-h-[54px] flex-row items-center border-b border-cream-line py-3" style={{ gap: 10 }}>
-                    <View className="h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: have ? C.leaf : 'transparent', borderWidth: have ? 0 : 1.5, borderColor: C.ink }}>
-                      {have ? <Check size={14} color={C.ink} strokeWidth={3} /> : null}
+                  <View key={`${ing.name}-${i}`} testID={`recipe-ingredient-${i}`} accessibilityLabel={`${ing.name}, ${formatIngredientAmount(ing, scale)}, ${tracked ? 'in kitchen' : basic ? 'basic ingredient' : staple ? 'kitchen staple' : 'needed'}`} className="min-h-[54px] flex-row items-center border-b border-cream-line py-3" style={{ gap: 10 }}>
+                    <View className="h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: !have ? 'transparent' : assumed ? C.creamDeep : C.leaf, borderWidth: have ? 0 : 1.5, borderColor: C.ink }}>
+                      {have ? <Check size={14} color={assumed ? C.inkSoft : C.ink} strokeWidth={3} /> : null}
                     </View>
-                    <Txt weight="bold" className="flex-1 text-[15px]">{ing.name}{basic ? <Txt className="text-[11px] text-ink-soft"> · basic</Txt> : null}</Txt>
+                    <Txt weight="bold" className="flex-1 text-[15px]">{ing.name}{assumed ? <Txt className="text-[11px] text-ink-soft">{basic ? ' · basic' : ' · staple'}</Txt> : null}</Txt>
                     <Txt weight="semibold" className="text-[13px] text-ink-soft">{formatIngredientAmount(ing, scale)}</Txt>
-                    {!have && !basic ? <View className="rounded-full bg-honey px-2 py-1"><Txt label weight="extrabold" className="text-[13px]" style={{ color: C.onHoney }}>NEED</Txt></View> : null}
+                    {!have ? <View className="rounded-full bg-honey px-2 py-1"><Txt label weight="extrabold" className="text-[13px]" style={{ color: C.onHoney }}>NEED</Txt></View> : null}
+                    {staple && assumed ? (
+                      <PressableScale testID={`recipe-ingredient-out-${i}`} accessibilityRole="button" accessibilityLabel={onList ? `${ing.name} is on your list` : `Out of ${ing.name}? Add to list`} disabled={onList} onPress={() => { haptic.tap(); addToGroceries([{ name: ing.name, qty: null, unit: '' }], recipe.id); toast(`${ing.name} added to your list`); }}>
+                        <View className="rounded-full px-2.5 py-1" style={{ borderWidth: 1.2, borderColor: onList ? C.leaf : C.hairline }}>
+                          <Txt weight="extrabold" className="text-[11px]" style={{ color: onList ? C.leafDark : C.inkSoft }}>{onList ? 'On list' : 'Out?'}</Txt>
+                        </View>
+                      </PressableScale>
+                    ) : null}
                   </View>
                 );
               })}

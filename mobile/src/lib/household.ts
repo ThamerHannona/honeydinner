@@ -190,7 +190,12 @@ export async function syncNow(): Promise<void> {
     }
 
     for (const s of received.slice(-3)) {
-      if (!s.to || s.to === h0.memberId) toast(`${s.from} sent you ${s.title} 🍽️`);
+      if (s.to && s.to !== h0.memberId) continue;
+      if (s.type === 'pickup') {
+        const list = (s.items ?? []).slice(0, 4).join(', ');
+        const more = (s.items?.length ?? 0) > 4 ? ` +${(s.items?.length ?? 0) - 4} more` : '';
+        toast(`🛒 ${s.from} asked you to grab: ${list}${more}`);
+      } else toast(`${s.from} sent you ${s.title} 🍽️`);
     }
   } catch (e) {
     if (e instanceof HouseholdError && e.code === 'no_household') {

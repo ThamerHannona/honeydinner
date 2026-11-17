@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { aisleToLocation, checkOffBoughtGroceries, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, namesMatch } from './kitchen';
+import { aisleToLocation, checkOffBoughtGroceries, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, mergeIngredients, namesMatch } from './kitchen';
 import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS, starterRecipes } from './mock-data';
 import type {
   DetectedItem,
@@ -30,6 +30,7 @@ interface AppState {
   lastClipboard: string | null;
   household: Household | null;
   diets: Diet[];
+  expiryNudges: boolean;
 
   // ephemeral drafts (not persisted)
   importDraft: RecipeDraft | null;
@@ -67,12 +68,15 @@ interface AppState {
   clearVote: () => void;
 
   setDiets: (d: Diet[]) => void;
+  setExpiryNudges: (on: boolean) => void;
   setHousehold: (h: Household | null) => void;
   patchHousehold: (p: Partial<Household>) => void;
   /** Apply records that came down from the shared kitchen. */
   applyRemote: (records: { kind: string; id: string; data: unknown; deleted: boolean }[]) => void;
   /** Queue an in-app "sent you a recipe" for the partner. */
   sendRecipeToPartner: (recipeId: string) => boolean;
+  /** Ask the partner to pick up grocery items (in-app nudge). */
+  requestPickup: (items: string[]) => boolean;
 }
 
 /** Drop duplicate recipes (same id, same source link, or same title + steps), keeping the newest. */
@@ -89,7 +93,12 @@ export function dedupeRecipes(list: Recipe[]): Recipe[] {
     keys.forEach((k) => seen.add(k));
     out.push(r);
   }
-  return out.length === list.length ? list : out;
+  // also merge duplicate ingredient lines in recipes saved before the merge existed
+  const merged = out.map((r) => {
+    const ing = mergeIngredients(r.ingredients);
+    return ing.length === r.ingredients.length ? r : { ...r, ingredients: ing };
+  });
+  return merged.length === list.length && merged.every((r, i) => r === list[i]) ? list : merged;
 }
 
 const seedState = () => ({
@@ -106,6 +115,7 @@ export const useApp = create<AppState>()(
       lastClipboard: null,
       household: null,
       diets: [],
+      expiryNudges: true,
       importDraft: null,
       scanDraft: [],
       ...seedState(),
@@ -195,7 +205,7 @@ export const useApp = create<AppState>()(
           ...d,
           id,
           title: d.title.trim() || 'Untitled recipe',
-          ingredients: d.ingredients.filter((i) => i.name.trim()),
+          ingredients: mergeIngredients(d.ingredients.filter((i) => i.name.trim())),
           steps: d.steps.filter((x) => x.trim()),
           saved: true,
           importedAt: imported ? now : null,
@@ -301,6 +311,7 @@ export const useApp = create<AppState>()(
       clearVote: () => set({ vote: null }),
 
       setDiets: (d) => set({ diets: d }),
+      setExpiryNudges: (on) => set({ expiryNudges: on }),
       setHousehold: (h) => set({ household: h }),
       patchHousehold: (p) => set((s) => (s.household ? { household: { ...s.household, ...p } } : {})),
       applyRemote: (records) =>
@@ -327,6 +338,33 @@ export const useApp = create<AppState>()(
           }
           return { recipes, pantry, groceries, vote };
         }),
+      requestPickup: (items) => {
+        const s = get();
+        const h = s.household;
+        if (!h || !items.length) return false;
+        const partner = h.members.find((m) => m.memberId !== h.memberId) ?? null;
+        const me = s.members.find((m) => m.isMe);
+        set({
+          household: {
+            ...h,
+            outbox: [
+              ...h.outbox,
+              {
+                id: uid('pick'),
+                type: 'pickup',
+                items: items.slice(0, 40),
+                recipeId: '',
+                title: `${items.length} item${items.length === 1 ? '' : 's'}`,
+                from: me?.name ?? 'Your partner',
+                fromMemberId: h.memberId,
+                to: partner?.memberId ?? null,
+                at: new Date().toISOString(),
+              },
+            ],
+          },
+        });
+        return true;
+      },
       sendRecipeToPartner: (recipeId) => {
         const s = get();
         const h = s.household;
@@ -384,6 +422,7 @@ export const useApp = create<AppState>()(
         lastClipboard: s.lastClipboard,
         household: s.household,
         diets: s.diets,
+        expiryNudges: s.expiryNudges,
       }),
       onRehydrateStorage: () => () => {
         useApp.setState((s) => ({ hydrated: true, recipes: dedupeRecipes(s.recipes) }));

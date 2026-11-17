@@ -8,13 +8,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, SlideInLeft, SlideInRight, useAnimatedStyle, withTiming, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import { ChevronLeft, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Check, ChevronLeft, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useCookVoice, type VoiceCommand } from '@/lib/cook-voice';
 import { useStepImages } from '@/lib/services/step-images';
 import { AnimatedFridgeGenie } from '@/components/brand';
 import { Button, PressableScale, Txt, AView } from '@/components/ui';
-import { findTimerMinutes } from '@/lib/kitchen';
+import { findTimerMinutes, isBasic, namesMatch } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
 import { decodeSharedUrl, ingestInbox, whenHydrated } from '@/lib/use-share-inbox';
 import { importRecipe } from '@/lib/services/kitchen-ai';
@@ -63,6 +63,14 @@ export default function CookMode() {
   const steps = recipe?.steps ?? [];
   const total = steps.length;
   const done = idx >= total;
+  const pantry = useApp((st) => st.pantry);
+  const markUsed = useApp((st) => st.markUsed);
+  const [usedUp, setUsedUp] = useState<string[]>([]);
+  // Kitchen items this recipe used (tracked items only, not salt/pepper/staples)
+  const usedCandidates = React.useMemo(
+    () => (recipe ? pantry.filter((p) => recipe.ingredients.some((i) => !isBasic(i.name) && namesMatch(p.name, i.name))).slice(0, 12) : []),
+    [pantry, recipe],
+  );
 
   const go = (n: number) => {
     haptic.select();
@@ -171,6 +179,26 @@ export default function CookMode() {
             <Txt weight="semibold" className="mt-3 text-center text-[17px]" style={{ color: C.onInk + 'b3' }}>
               FridgeGenie: That smells amazing from here. Enjoy, you two.
             </Txt>
+            {usedCandidates.length ? (
+              <View className="mt-8 w-full" testID="cook-used-up">
+                <Txt label weight="extrabold" className="mb-1 text-center text-[13px] uppercase tracking-widest" style={{ color: C.honey }}>Used anything up?</Txt>
+                <Txt weight="semibold" className="mb-4 text-center text-[14px]" style={{ color: C.onInk + '99' }}>Tap what's finished and I'll take it out of your kitchen.</Txt>
+                <View className="flex-row flex-wrap justify-center" style={{ gap: 8 }}>
+                  {usedCandidates.map((p) => {
+                    const on = usedUp.includes(p.id);
+                    return (
+                      <PressableScale key={p.id} testID={`cook-used-${p.id}`} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={`${p.name} used up`} onPress={() => { haptic.tap(); setUsedUp((u) => (on ? u.filter((x) => x !== p.id) : [...u, p.id])); }}>
+                        <View className="flex-row items-center rounded-full px-3.5 py-2.5" style={{ gap: 6, backgroundColor: on ? C.honey : C.timerTrack, borderWidth: 1.5, borderColor: on ? C.honey : 'transparent' }}>
+                          <Txt className="text-[15px]">{p.emoji}</Txt>
+                          <Txt weight="extrabold" className="text-[14px]" style={{ color: on ? C.onHoney : C.onInk }}>{p.name}</Txt>
+                          {on ? <Check size={14} color={C.onHoney} strokeWidth={3} /> : null}
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
           </AView>
         ) : (
           <Animated.View key={idx} entering={reduceMotion ? undefined : (dir === 1 ? SlideInRight : SlideInLeft).duration(260)}>
@@ -208,10 +236,11 @@ export default function CookMode() {
             <Button
               testID="cook-finish"
               variant="honey"
-              label="Finish"
+              label={usedUp.length ? `Finish · remove ${usedUp.length} from kitchen` : 'Finish'}
               onPress={() => {
                 haptic.success();
-                toast(`${recipe.title} — nailed it!`);
+                usedUp.forEach((pid) => markUsed(pid));
+                toast(usedUp.length ? `Nailed it! Removed ${usedUp.length} from your kitchen.` : `${recipe.title} — nailed it!`);
                 goBack();
               }}
             />

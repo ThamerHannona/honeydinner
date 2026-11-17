@@ -22,9 +22,64 @@ export const normalizeName = (name: string) =>
     .join(' ')
     .trim();
 
-/** Things we assume every kitchen has, so they never count as "missing". */
-const BASICS = ['salt', 'pepper', 'black pepper', 'water', 'ice', 'sea salt', 'kosher salt'];
+/** Things every kitchen has, so they never count as "missing". */
+const BASICS = ['salt', 'pepper', 'black pepper', 'water', 'ice', 'sea salt', 'kosher salt', 'salt and pepper', 'ground black pepper'];
 export const isBasic = (name: string) => BASICS.includes(normalizeName(name));
+
+/**
+ * Staples most kitchens keep stocked (oils, butter, vinegar, flour, sugar,
+ * sauces, dried herbs and ground spices). They show as "staple" instead of
+ * NEED; if you're actually out, the row's + adds it to the list.
+ */
+const STAPLE_WORDS = [
+  'oil', 'olive oil', 'vegetable oil', 'canola oil', 'cooking oil', 'avocado oil', 'sesame oil', 'coconut oil', 'cooking spray',
+  'butter', 'unsalted butter', 'salted butter',
+  'vinegar', 'white vinegar', 'apple cider vinegar', 'balsamic vinegar', 'red wine vinegar', 'rice vinegar',
+  'flour', 'all purpose flour', 'sugar', 'brown sugar', 'granulated sugar', 'baking soda', 'baking powder', 'cornstarch', 'corn starch',
+  'soy sauce', 'honey', 'ketchup', 'mustard', 'dijon mustard', 'hot sauce', 'worcestershire sauce',
+  'paprika', 'smoked paprika', 'cumin', 'oregano', 'thyme', 'rosemary', 'basil', 'chili powder', 'chili flake', 'red pepper flake',
+  'crushed red pepper', 'cayenne', 'cayenne pepper', 'garlic powder', 'onion powder', 'cinnamon', 'nutmeg', 'italian seasoning',
+  'bay leaf', 'curry powder', 'turmeric', 'coriander', 'garam masala', 'dried parsley', 'dried dill', 'vanilla', 'vanilla extract',
+];
+const STAPLE_SET = new Set(STAPLE_WORDS.map((w) => normalizeName(w)));
+export const isStaple = (name: string) => {
+  const core = coreName(name);
+  if (STAPLE_SET.has(core)) {
+    // fresh herbs are produce, not pantry staples
+    return !/\bfresh\b/i.test(name) || /\bdried or fresh\b|\bfresh or dried\b/i.test(name);
+  }
+  return /\b(dried|ground)\b/i.test(name) && core.split(' ').length <= 2;
+};
+
+/** Descriptor words that don't change which ingredient it is. */
+const DESCRIPTORS = new Set([
+  'dried', 'fresh', 'or', 'and', 'chopped', 'minced', 'diced', 'sliced', 'grated', 'shredded', 'crushed', 'ground', 'large', 'small',
+  'medium', 'whole', 'finely', 'roughly', 'thinly', 'to', 'taste', 'optional', 'for', 'serving', 'garnish', 'extra', 'virgin', 'of',
+  'leaf', 'leave', 'sprig', 'clove', 'pinch', 'a', 'the', 'softened', 'melted', 'room', 'temperature', 'boneless', 'skinless', 'peeled',
+]);
+export function coreName(name: string): string {
+  const words = normalizeName(name).split(' ').filter((w) => w && !DESCRIPTORS.has(w));
+  return words.join(' ') || normalizeName(name);
+}
+
+/** Merge lines that are the same ingredient ("dried rosemary" + "dried or fresh rosemary"). */
+export function mergeIngredients(list: Ingredient[]): Ingredient[] {
+  const out: Ingredient[] = [];
+  for (const ing of list) {
+    const core = coreName(ing.name);
+    const twin = out.find((o) => coreName(o.name) === core);
+    if (!twin) {
+      out.push({ ...ing });
+      continue;
+    }
+    if (twin.qty != null && ing.qty != null && twin.unit === ing.unit) twin.qty = Math.round((twin.qty + ing.qty) * 100) / 100;
+    else if (twin.qty == null && ing.qty != null) {
+      twin.qty = ing.qty;
+      twin.unit = ing.unit;
+    }
+  }
+  return out;
+}
 
 export const namesMatch = (a: string, b: string) => {
   const na = normalizeName(a);
@@ -100,10 +155,11 @@ export interface RecipeMatch {
 
 export const pantryHas = (pantry: PantryItem[], ingredientName: string) =>
   isBasic(ingredientName) ||
+  isStaple(ingredientName) ||
   pantry.some((p) => freshness(p.expiresAt) !== 'expired' && namesMatch(p.name, ingredientName));
 
 export const matchRecipe = (recipe: Recipe, pantry: PantryItem[]): RecipeMatch => {
-  const counted = recipe.ingredients.filter((i) => !isBasic(i.name));
+  const counted = recipe.ingredients.filter((i) => !isBasic(i.name) && !isStaple(i.name));
   const missing = counted.filter((i) => !pantryHas(pantry, i.name));
   const soon = pantry.filter((p) => freshness(p.expiresAt) === 'soon');
   const usesExpiring = counted.filter((i) => soon.some((p) => namesMatch(p.name, i.name))).length;
