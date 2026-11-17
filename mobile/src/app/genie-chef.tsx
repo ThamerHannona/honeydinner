@@ -13,6 +13,7 @@ import { haptic, signature } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
 import { DIETS, askGenieForRecipes, dishPhoto, ideaToDraft, type GenieIdea } from '@/lib/services/genie-recipes';
 import type { Diet } from '@/lib/types';
+import { pantryHas } from '@/lib/kitchen';
 
 const MOODS = ['Quick', 'Comfort food', 'Light', 'Something new'] as const;
 const THINKING = [
@@ -162,7 +163,8 @@ export default function GenieChef() {
         {/* ideas */}
         <View className="mt-8 px-5" style={{ gap: 16 }} testID="genie-ideas">
           {ideas.map((idea, i) => {
-            const missing = idea.ingredients.filter((x) => !x.have);
+            // Same rules as the recipe screen: basics and staples (oil, butter, spices) count as had.
+            const missing = idea.ingredients.filter((x) => !x.have && !pantryHas(pantry, x.name));
             const isSaved = !!saved[idea.title];
             return (
               <Animated.View key={idea.title} entering={FadeInDown.delay(i * 110).springify().damping(16)} exiting={FadeOut} testID={`genie-idea-${i}`}>

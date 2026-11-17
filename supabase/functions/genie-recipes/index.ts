@@ -23,7 +23,7 @@ const DIET_RULES: Record<string, string> = {
   carnivore: "Carnivore: only animal foods — meat, fish, seafood, eggs, butter/tallow, hard cheese. No plants, grains, sugar, seed oils. Salt is fine.",
   keto: "Keto: under ~20 g net carbs per serving. No grains, sugar, potatoes, rice, pasta, bread, most fruit, beans. Lots of meat, fish, eggs, cheese, butter, olive oil, avocado, leafy and low-carb veg.",
   atkins: "Atkins: low-carb, high-protein. No sugar, grains, bread, pasta, rice, potatoes. Meat, fish, eggs, cheese, low-carb vegetables, healthy fats.",
-  paleo: "Paleo: meat, fish, eggs, vegetables, fruit, nuts, seeds, olive/avocado oil. No grains, legumes, dairy, refined sugar, processed food.",
+  paleo: "Paleo: fresh meat, fish, eggs, vegetables, fruit, nuts, seeds, olive/avocado oil. No grains, legumes, dairy, refined sugar, seed oils, or processed food. Processed meats (sausage, bacon, deli meat, hot dogs) only if named as sugar-free/uncured, e.g. 'sugar-free uncured bacon' — otherwise use fresh meat instead.",
   mediterranean: "Mediterranean: vegetables, legumes, whole grains, olive oil, fish and seafood, some poultry, eggs, yogurt/feta, herbs, lemon. Little red meat, no processed meat or added sugar.",
   "low-fat": "Low-fat: lean proteins (chicken breast, white fish, legumes, egg whites), lots of vegetables, whole grains; minimal oil (≤1 tsp per serving), no fried food, cream, butter or fatty cuts.",
   vegan: "Vegan: absolutely no animal products — no meat, poultry, fish, seafood, eggs, dairy (milk, butter, cheese, cream, yogurt, ghee), honey, gelatin, or animal stock.",
@@ -31,7 +31,7 @@ const DIET_RULES: Record<string, string> = {
   pescatarian: "Pescatarian: no meat or poultry; fish, seafood, eggs and dairy are fine.",
   "low-carb": "Low-carb: under ~40 g carbs per serving; limit bread, pasta, rice, potatoes and sugar; focus on protein and non-starchy vegetables.",
   "high-protein": "High-protein: at least ~35 g protein per serving from lean meat, fish, eggs, Greek yogurt, cottage cheese, tofu, tempeh or legumes.",
-  whole30: "Whole30: no added sugar or sweeteners, alcohol, grains, legumes (including soy and peanuts), dairy, or processed additives. Meat, seafood, eggs, vegetables, fruit, natural fats.",
+  whole30: "Whole30: no added sugar or sweeteners, alcohol, grains, legumes (including soy and peanuts), dairy, or processed additives. Meat, seafood, eggs, vegetables, fruit, natural fats. Sausage/bacon only if named as compliant (sugar-free, no additives).",
   "nut-free": "Nut-free: no tree nuts, peanuts, nut butters, nut oils or nut milks.",
   "low-sugar": "Low-sugar: no added sugar, honey, syrups or sweet sauces; minimal fruit; suitable for diabetics.",
   "low-sodium": "Low-sodium: no added salt beyond a pinch; avoid soy sauce, stock cubes, cured meats, salty cheese and canned foods with salt; season with herbs, citrus, garlic and spices.",
@@ -73,6 +73,7 @@ Deno.serve(async (req) => {
       "- Build each mainly from the kitchen inventory. Prioritise items marked 'use within'. Assume basics are available: salt, pepper, water, cooking oil (unless the diet forbids it), common dried spices.\n" +
       "- At most 3 ingredients per recipe that are NOT in the inventory (have=false); prefer 0–1.\n" +
       "- Diet rules are strict and ALL selected styles apply at once: every ingredient must comply with every rule. If the inventory can't make a compliant dinner, use fewer inventory items and add compliant missing items instead.\n" +
+      "- Store-bought processed items (sausage, bacon, deli meat, sauces, broth, seasoning mixes) often hide sugar, gluten, dairy or additives. If one would break a selected diet unless it's a clean version, either skip it or name the compliant version in the ingredient (e.g. 'sugar-free andouille sausage (check label)'). Never tag a dish with a diet it doesn't fully meet.\n" +
       "- title: appetising dish name in Title Case. blurb: one short sentence on why it's a good pick tonight (mention what it uses up).\n" +
       "- ingredients: qty as a number (0.5 not 1/2) or null; unit short (g, kg, ml, cup, tbsp, tsp, oz, lb, clove, can, pinch) or \"\" for whole items. Scale to the servings requested.\n" +
       "- steps: 5–9 short imperative steps, one action each, with times and heat levels.\n" +
