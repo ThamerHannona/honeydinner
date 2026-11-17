@@ -221,14 +221,47 @@ function itemsFromResponse(raw: unknown, fallback: DetectedItem['location']): De
   return out;
 }
 
+/**
+ * Long receipts get split into overlapping vertical sections. Vision models
+ * shrink every image to ~768px on its short side, so a whole tall receipt in
+ * one picture turns the small print to mush; sections keep it legible.
+ */
+async function receiptSections(photo: ScanPhoto): Promise<string[] | null> {
+  if (!photo.uri) return null;
+  try {
+    const IM = await import('expo-image-manipulator');
+    const base = await IM.manipulateAsync(photo.uri, [{ resize: { width: 1600 } }], { compress: 1, format: IM.SaveFormat.JPEG });
+    const { width: w, height: h } = base;
+    if (!w || !h || h / w < 1.6) return null; // short receipt: one image is fine
+    const tileH = Math.round(w * 1.3);
+    const step = Math.round(tileH * 0.85); // 15% overlap so no line is cut in half
+    const tiles: string[] = [];
+    for (let y = 0; y < h && tiles.length < 5; y += step) {
+      const height = Math.min(tileH, h - y);
+      if (height < w * 0.25 && tiles.length) break; // tiny leftover strip
+      const out = await IM.manipulateAsync(base.uri, [{ crop: { originX: 0, originY: y, width: w, height } }], {
+        compress: 0.85,
+        format: IM.SaveFormat.JPEG,
+        base64: true,
+      });
+      if (out.base64) tiles.push(out.base64);
+      if (y + height >= h) break;
+    }
+    return tiles.length > 1 ? tiles : null;
+  } catch {
+    return null;
+  }
+}
+
 async function scanWithVision(mode: 'receipt' | 'fridge', photo: ScanPhoto): Promise<DetectedItem[]> {
-  const image = await readBase64(photo);
+  const sections = mode === 'receipt' ? await receiptSections(photo) : null;
+  const image = sections ? sections[0] : await readBase64(photo);
   if (!image) throw new Error('No photo');
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   if (!base || !anon) throw new Error('Not configured');
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 45000);
+  const timer = setTimeout(() => ctrl.abort(), 75000);
   try {
     const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/scan-kitchen`, {
       method: 'POST',
@@ -237,7 +270,7 @@ async function scanWithVision(mode: 'receipt' | 'fridge', photo: ScanPhoto): Pro
         apikey: anon,
         authorization: `Bearer ${anon}`,
       },
-      body: JSON.stringify({ mode, image }),
+      body: JSON.stringify(sections ? { mode, images: sections } : { mode, image }),
       signal: ctrl.signal,
     });
     const body = await res.json().catch(() => null) as { items?: unknown; error?: string } | null;

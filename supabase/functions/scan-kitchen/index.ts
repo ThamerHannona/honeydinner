@@ -1,6 +1,6 @@
 // scan-kitchen — reads a fridge-shelf or grocery-receipt photo with OpenAI
 // vision and returns pantry line items for the in-app review step.
-// Body: { mode: "receipt" | "fridge", image: "<base64 jpeg/png/webp>" }
+// Body: { mode: "receipt" | "fridge", image: "<base64>" } or { mode, images: ["<base64>", ...] }
 //    →  { items: [{ name, quantity, location, expiresInDays }] }
 // Secrets: OPENAI_API_KEY. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided.
 
@@ -16,8 +16,10 @@ const LOCS = new Set(["fridge", "freezer", "pantry"]);
 
 const PROMPT: Record<string, string> = {
   receipt:
-    "You are reading a photo of a grocery store receipt. Read EVERY product line, top to bottom, carefully — receipts are dense and abbreviated.\n" +
-    "Return JSON {\"items\":[{\"name\":\"friendly grocery name\",\"quantity\":\"e.g. 2, 1.4 lb, 1 dozen, 1 jar\",\"location\":\"fridge|freezer|pantry\",\"expiresInDays\":number|null}]}.\n" +
+    "You are reading a grocery store receipt. It may come as ONE photo or as SEVERAL photos that are consecutive top-to-bottom sections of the same receipt; neighbouring sections overlap by a few lines, so a line that appears at the bottom of one section and the top of the next is ONE line — count it once.\n" +
+    "Work in two passes and return JSON {\"lines\":[\"exact text of every product line, in order\"],\"items\":[{\"name\":\"friendly grocery name\",\"quantity\":\"e.g. 2, 1.4 lb, 1 dozen, 1 jar\",\"location\":\"fridge|freezer|pantry\",\"expiresInDays\":number|null}]}.\n" +
+    "Pass 1 (lines): transcribe every purchased-product line exactly as printed, including its quantity/weight line if it has one. Do not skip any.\n" +
+    "Pass 2 (items): turn each food/drink line from pass 1 into an item. Every item must come from a transcribed line — never add products that aren't printed.\n" +
     "Rules:\n" +
     "- Decode store abbreviations into the everyday product: 'GV WHL MLK GAL' → Whole milk (1 gallon); 'KS ORG EGGS 24CT' → Organic eggs (24); 'BNLS SKNLS CHKN BRST' → Boneless skinless chicken breast; 'HASS AVOC' → Avocados; 'ORG BBY SPIN 5OZ' → Organic baby spinach (5 oz).\n" +
     "- Drop brand/store prefixes (GV, KS, KIRK, 365, TJ, HEB, MKT, ORG stays as 'Organic').\n" +
@@ -62,7 +64,7 @@ function parseItems(raw: unknown, fallbackLoc: string): { name: string; quantity
   return out;
 }
 
-async function readImage(key: string, prompt: string, url: string, models: string[]): Promise<unknown> {
+async function readImage(key: string, prompt: string, urls: string[], models: string[]): Promise<unknown> {
   for (const model of models) {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -74,8 +76,8 @@ async function readImage(key: string, prompt: string, url: string, models: strin
         messages: [{
           role: "user",
           content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url, detail: "high" } },
+            { type: "text", text: urls.length > 1 ? `${prompt}\n\nThere are ${urls.length} sections below, in order from the top of the receipt to the bottom.` : prompt },
+            ...urls.map((url) => ({ type: "image_url", image_url: { url, detail: "high" } })),
           ],
         }],
       }),
@@ -97,15 +99,18 @@ Deno.serve(async (req) => {
   try {
     const key = Deno.env.get("OPENAI_API_KEY");
     if (!key) return json({ error: "Not configured" }, 500);
-    const body = await req.json().catch(() => null) as { mode?: unknown; image?: unknown } | null;
+    const body = await req.json().catch(() => null) as { mode?: unknown; image?: unknown; images?: unknown } | null;
     const mode = String(body?.mode ?? "") === "fridge" ? "fridge" : String(body?.mode ?? "") === "receipt" ? "receipt" : "";
     if (!mode) return json({ error: "Missing mode" }, 400);
-    const url = dataUrl(String(body?.image ?? ""));
-    if (!url) return json({ error: "Missing image" }, 400);
+    const rawImages = Array.isArray((body as { images?: unknown })?.images) ? ((body as { images: unknown[] }).images).slice(0, 5) : [body?.image];
+    const urls = rawImages.map((i) => dataUrl(String(i ?? ""))).filter((u): u is string => !!u);
+    if (!urls.length) return json({ error: "Missing image" }, 400);
 
     // Receipts are dense small print: lead with the strongest vision models.
     const models = mode === "receipt" ? ["gpt-4.1", "gpt-4o", "gpt-4o-mini"] : ["gpt-4o", "gpt-4o-mini"];
-    const parsed = await readImage(key, PROMPT[mode], url, models);
+    const parsed = await readImage(key, PROMPT[mode], urls, models);
+    const lineCount = Array.isArray((parsed as { lines?: unknown[] } | null)?.lines) ? (parsed as { lines: unknown[] }).lines.length : 0;
+    console.log("[scan-kitchen]", mode, `${urls.length} image(s)`, `${lineCount} lines`);
     if (!parsed) return json({ error: "Couldn't read that photo" }, 502);
     const items = parseItems(parsed, mode === "receipt" ? "fridge" : "fridge");
     if (!items.length) return json({ error: "No items found" }, 422);
