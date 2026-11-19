@@ -1,3 +1,4 @@
+import { goBack } from '@/lib/nav';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import React, { useState } from 'react';
 import { TextInput, View, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
@@ -37,6 +38,7 @@ export default function ScanReview() {
     const counts: Record<StorageLocation, number> = { fridge: 0, freezer: 0, pantry: 0 };
     for (const item of valid) counts[item.location] += 1;
     const location = (['fridge', 'pantry', 'freezer'] as StorageLocation[]).sort((a, b) => counts[b] - counts[a])[0];
+    if (!useApp.getState().onboarded) { goBack(); return; }
     router.dismissAll();
     router.navigate({ pathname: '/pantry', params: { location, stocked: String(Date.now()) } });
   };

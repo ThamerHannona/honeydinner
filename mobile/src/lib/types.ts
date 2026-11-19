@@ -100,7 +100,7 @@ export interface HouseholdMember {
 export interface SentRecipe {
   id: string;
   /** 'recipe' (default) or a 'pickup' request for grocery items. */
-  type?: 'recipe' | 'pickup';
+  type?: 'recipe' | 'pickup' | 'tonight' | 'tonight-ok';
   items?: string[];
   recipeId: string;
   title: string;
@@ -121,4 +121,17 @@ export interface Household {
   shadow: Record<string, string>;
   /** Recipes sent to the partner, waiting to go up with the next sync. */
   outbox: SentRecipe[];
+}
+
+/** Tonight's dinner decision, reset each day. */
+export interface TonightPlan {
+  /** Local day key, YYYY-MM-DD. */
+  date: string;
+  /** Locked-in recipe for tonight (null = still deciding). */
+  recipeId: string | null;
+  lockedBy: string | null;
+  /** Partner's thumbs-up. */
+  okBy: string | null;
+  /** Recipes passed on today ("Not tonight"). */
+  passes: string[];
 }

@@ -57,6 +57,7 @@ export default function GenieChef() {
     onSuccess: (list) => {
       haptic.success();
       setIdeas(list);
+      useApp.getState().setGenieUsed();
       setSaved({});
     },
     onError: (e: Error) => toast(e.message),

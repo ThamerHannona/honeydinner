@@ -1,3 +1,4 @@
+import { goBack } from '@/lib/nav';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import React, { useState } from 'react';
 import { Switch, TextInput, View, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
@@ -55,6 +56,7 @@ export default function ImportReview() {
     const id = saveRecipe(d, !isManual);
     if (addMissing && missing.length) addToGroceries(missing, id);
     toast(genieSaved(d.title.trim()));
+    if (!useApp.getState().onboarded) { goBack(); return; }
     router.dismissAll();
     router.navigate('/recipes');
   };

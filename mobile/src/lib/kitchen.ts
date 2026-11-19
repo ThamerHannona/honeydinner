@@ -177,6 +177,37 @@ export const rankSuggestions = (recipes: Recipe[], pantry: PantryItem[]) =>
         b.match.ratio + b.match.usesExpiring * 0.08 - (a.match.ratio + a.match.usesExpiring * 0.08),
     );
 
+/** Local day key YYYY-MM-DD. */
+export const todayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const dayHash = (str: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 1000) / 1000;
+};
+
+/**
+ * Tonight's ranking: mostly-have + uses food going off, skips recipes cooked this week
+ * and ones passed on today, with a per-day shuffle so the pick changes daily.
+ */
+export const pickTonight = (
+  recipes: Recipe[],
+  pantry: PantryItem[],
+  opts: { passes: string[]; cookLog: Record<string, string>; today: string },
+) => {
+  const weekAgo = Date.now() - 7 * 86400000;
+  const fresh = (r: Recipe) => !(opts.cookLog[r.id] && Date.parse(opts.cookLog[r.id]) > weekAgo);
+  let pool = recipes.filter((r) => !opts.passes.includes(r.id) && fresh(r));
+  if (!pool.length) pool = recipes.filter((r) => !opts.passes.includes(r.id));
+  return pool
+    .map((recipe) => {
+      const match = matchRecipe(recipe, pantry);
+      const score = match.ratio + match.usesExpiring * 0.15 + dayHash(recipe.id + opts.today) * 0.35;
+      return { recipe, match, score };
+    })
+    .sort((a, b) => b.score - a.score);
+};
+
 /* ---------- Aisles, emoji & storage ---------- */
 
 const AISLE_WORDS: [Aisle, string[]][] = [

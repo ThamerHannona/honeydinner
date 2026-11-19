@@ -12,7 +12,9 @@ import { DIETS } from '@/lib/services/genie-recipes';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow, GenieBubble, MatchStamp, StatusDot } from '@/components/ui';
 import { pantryGreeting } from '@/lib/genie';
-import { expiryLabel, freshness, matchRecipe, rankSuggestions } from '@/lib/kitchen';
+import { expiryLabel, freshness, matchRecipe, pickTonight, todayKey } from '@/lib/kitchen';
+import { TonightCard } from '@/components/tonight-card';
+import { DayOneChecklist } from '@/components/day-one';
 import { useApp } from '@/lib/store';
 
 /** Tonight heading only — Caveat Brush; other screens keep Fraunces. */
@@ -33,12 +35,15 @@ export default function TonightScreen() {
   const diets = useApp((s) => s.diets);
   const insets = useSafeAreaInsets();
   const soon = useMemo(() => pantry.filter((item) => freshness(item.expiresAt) === 'soon').sort((a, b) => (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')), [pantry, revision]);
-  const suggestions = useMemo(() => {
-    const ranked = rankSuggestions(recipes, pantry);
-    const ids = new Set(ranked.map(({ recipe }) => recipe.id));
-    return [...ranked, ...recipes.filter((r) => !ids.has(r.id)).map((recipe) => ({ recipe, match: matchRecipe(recipe, pantry) }))].slice(0, 3);
-  }, [recipes, pantry, revision]);
-  const hero = suggestions[0];
+  const tonight = useApp((s) => s.tonight);
+  const cookLog = useApp((s) => s.cookLog);
+  const partner = useApp((s) => (s.household ? s.household.members.find((m) => m.memberId !== s.household?.memberId)?.name ?? null : null));
+  const today = todayKey();
+  const plan = tonight?.date === today ? tonight : null;
+  const ranked = useMemo(() => pickTonight(recipes, pantry, { passes: plan?.passes ?? [], cookLog, today }), [recipes, pantry, plan?.passes, cookLog, today, revision]);
+  const lockedRecipe = plan?.recipeId ? recipes.find((r) => r.id === plan.recipeId) : undefined;
+  const hero = lockedRecipe ? { recipe: lockedRecipe, match: matchRecipe(lockedRecipe, pantry) } : ranked[0];
+  const suggestions = hero ? [hero, ...ranked.filter((x) => x.recipe.id !== hero.recipe.id).slice(0, 2)] : [];
   const day = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
 
   return (
@@ -87,29 +92,9 @@ export default function TonightScreen() {
               <Sparkles size={20} color={C.honey} fill={C.honey} />
             </View>
           </PressableScale>
+          <DayOneChecklist />
           {hero ? (
-            <HardShadow color={C.ink} x={6} y={6} radius={28} style={{ marginBottom: 24 }}><View testID="tonight-featured-card" className="rounded-[28px] bg-honey p-5" style={{ borderWidth: 1.5, borderColor: C.ink }}>
-              <View className="mb-2 h-[146px] flex-row items-start justify-between">
-                <View className="mt-2"><MatchStamp testID="suggestion-match-0" have={hero.match.have} total={hero.match.total} /></View>
-                <PressableScale testID="suggestion-0" accessibilityRole="button" accessibilityLabel={`Open ${hero.recipe.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: hero.recipe.id } })} style={{ marginTop: -30, marginRight: -13 }}>
-                  <View className="items-center justify-center rounded-full bg-white p-2" style={{ width: 176, height: 176 }}>
-                    <Image testID="suggestion-photo-0" source={{ uri: hero.recipe.image }} accessibilityLabel={hero.recipe.title} contentFit="cover" style={{ width: 158, height: 158, borderRadius: 79, borderWidth: 1.5, borderColor: C.ink }} transition={200} />
-                  </View>
-                </PressableScale>
-              </View>
-              <Txt label weight="extrabold" className="mb-1 text-[15px] uppercase tracking-widest text-onHoney">{hero.recipe.cookTime} MIN · FROM {hero.recipe.source.platform === 'photo' ? 'PHOTOS' : hero.recipe.source.platform.toUpperCase()}</Txt>
-              <PressableScale testID="tonight-featured-title" accessibilityRole="button" accessibilityLabel={`Open ${hero.recipe.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: hero.recipe.id } })}>
-                <Txt display weight="bold" className="mb-4 text-[27px] leading-[29px]" style={{ letterSpacing: -0.8, color: C.onHoney }}>{hero.recipe.title}</Txt>
-              </PressableScale>
-              <View className="flex-row" style={{ gap: 10 }}>
-                <PressableScale testID="tonight-cook" accessibilityRole="button" accessibilityLabel="Cook tonight" style={{ flex: 1.15 }} onPress={() => router.push({ pathname: '/cook/[id]', params: { id: hero.recipe.id, servings: String(hero.recipe.servings) } })}>
-                  <HardShadow color={C.honey} radius={999}><View className="h-[50px] items-center justify-center rounded-full bg-ink"><Txt weight="extrabold" className="text-[14px] text-cream">Cook tonight</Txt></View></HardShadow>
-                </PressableScale>
-                <PressableScale testID="tonight-ask-honey" accessibilityRole="button" accessibilityLabel="Ask Honey" style={{ flex: 1 }} onPress={() => router.push('/ask-honey')}>
-                  <View className="h-[50px] flex-row items-center justify-center rounded-full border border-ink bg-white" style={{ gap: 6 }}><Heart size={14} fill={C.ink} color={C.ink} /><Txt weight="extrabold" className="text-[14px]">Ask Honey</Txt></View>
-                </PressableScale>
-              </View>
-            </View></HardShadow>
+            <TonightCard hero={hero} plan={plan} partner={partner} />
           ) : <Txt testID="empty-suggestions" className="mb-6 text-ink-soft">No recipes yet. Add one with the + button.</Txt>}
           <Txt label weight="extrabold" className="mb-2 text-[15px] uppercase tracking-wider">Use it up soon</Txt>
         </View>

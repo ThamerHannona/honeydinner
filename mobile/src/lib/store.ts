@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { aisleToLocation, checkOffBoughtGroceries, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, mergeIngredients, namesMatch } from './kitchen';
+import { todayKey, aisleToLocation, checkOffBoughtGroceries, daysFromNow, defaultShelfLife, formatQty, guessAisle, guessEmoji, mergeIngredients, namesMatch } from './kitchen';
 import { createMockData, ME_ID, MOCK_DATA_VERSION, SEED_RECIPE_IDS, starterRecipes } from './mock-data';
 import type {
   DetectedItem,
@@ -15,6 +15,8 @@ import type {
   Recipe,
   RecipeDraft,
   VoteSession,
+  TonightPlan,
+  SentRecipe,
 } from './types';
 
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -33,6 +35,12 @@ interface AppState {
   diets: Diet[];
   expiryNudges: boolean;
   recipeLanguage: RecipeLanguage;
+  tonight: TonightPlan | null;
+  /** recipeId -> last time it was cooked (ISO). */
+  cookLog: Record<string, string>;
+  /** Day-1 checklist: user has asked the genie for ideas at least once. */
+  genieUsed: boolean;
+  checklistDismissed: boolean;
 
   // ephemeral drafts (not persisted)
   importDraft: RecipeDraft | null;
@@ -80,6 +88,14 @@ interface AppState {
   sendRecipeToPartner: (recipeId: string) => boolean;
   /** Ask the partner to pick up grocery items (in-app nudge). */
   requestPickup: (items: string[]) => boolean;
+  passTonight: (recipeId: string) => void;
+  lockTonight: (recipeId: string) => void;
+  unlockTonight: () => void;
+  okTonight: () => void;
+  receiveTonight: (s: SentRecipe) => void;
+  markCooked: (recipeId: string) => void;
+  setGenieUsed: () => void;
+  dismissChecklist: () => void;
 }
 
 /** Drop duplicate recipes (same id, same source link, or same title + steps), keeping the newest. */
@@ -120,6 +136,10 @@ export const useApp = create<AppState>()(
       diets: [],
       expiryNudges: true,
       recipeLanguage: 'en',
+      tonight: null,
+      cookLog: {},
+      genieUsed: false,
+      checklistDismissed: false,
       importDraft: null,
       scanDraft: [],
       ...seedState(),
@@ -343,6 +363,53 @@ export const useApp = create<AppState>()(
           }
           return { recipes, pantry, groceries, vote };
         }),
+      passTonight: (recipeId) =>
+        set((s) => {
+          const today = todayKey();
+          const t = s.tonight?.date === today ? s.tonight : null;
+          return { tonight: { date: today, recipeId: null, lockedBy: null, okBy: null, passes: [...(t?.passes ?? []), recipeId] } };
+        }),
+      lockTonight: (recipeId) => {
+        const s = get();
+        const today = todayKey();
+        const me = s.members.find((m) => m.isMe);
+        const t = s.tonight?.date === today ? s.tonight : null;
+        set({ tonight: { date: today, recipeId, lockedBy: me?.name ?? 'You', okBy: null, passes: t?.passes ?? [] } });
+        const h = get().household;
+        const recipe = s.recipes.find((r) => r.id === recipeId);
+        if (h && recipe) {
+          const partner = h.members.find((m) => m.memberId !== h.memberId) ?? null;
+          set({ household: { ...h, outbox: [...h.outbox, { id: uid('tn'), type: 'tonight', recipeId, title: recipe.title, from: me?.name ?? 'Your partner', fromMemberId: h.memberId, to: partner?.memberId ?? null, at: new Date().toISOString() }] } });
+        }
+      },
+      unlockTonight: () => set((s) => (s.tonight ? { tonight: { ...s.tonight, recipeId: null, lockedBy: null, okBy: null } } : {})),
+      okTonight: () => {
+        const s = get();
+        const t = s.tonight;
+        const me = s.members.find((m) => m.isMe);
+        if (!t?.recipeId) return;
+        set({ tonight: { ...t, okBy: me?.name ?? 'You' } });
+        const h = s.household;
+        if (h) {
+          const partner = h.members.find((m) => m.memberId !== h.memberId) ?? null;
+          set({ household: { ...h, outbox: [...h.outbox, { id: uid('tok'), type: 'tonight-ok', recipeId: t.recipeId, title: '', from: me?.name ?? 'Your partner', fromMemberId: h.memberId, to: partner?.memberId ?? null, at: new Date().toISOString() }] } });
+        }
+      },
+      receiveTonight: (m) =>
+        set((s) => {
+          const today = todayKey();
+          const t = s.tonight?.date === today ? s.tonight : null;
+          if (m.type === 'tonight') return { tonight: { date: today, recipeId: m.recipeId, lockedBy: m.from, okBy: null, passes: t?.passes ?? [] } };
+          if (m.type === 'tonight-ok' && t?.recipeId === m.recipeId) return { tonight: { ...t, okBy: m.from } };
+          return {};
+        }),
+      markCooked: (recipeId) =>
+        set((s) => ({
+          cookLog: { ...s.cookLog, [recipeId]: new Date().toISOString() },
+          tonight: s.tonight?.recipeId === recipeId ? { ...s.tonight, recipeId: null, lockedBy: null, okBy: null, passes: [...s.tonight.passes, recipeId] } : s.tonight,
+        })),
+      setGenieUsed: () => set({ genieUsed: true }),
+      dismissChecklist: () => set({ checklistDismissed: true }),
       requestPickup: (items) => {
         const s = get();
         const h = s.household;
@@ -429,6 +496,10 @@ export const useApp = create<AppState>()(
         diets: s.diets,
         expiryNudges: s.expiryNudges,
         recipeLanguage: s.recipeLanguage,
+        tonight: s.tonight,
+        cookLog: s.cookLog,
+        genieUsed: s.genieUsed,
+        checklistDismissed: s.checklistDismissed,
       }),
       onRehydrateStorage: () => () => {
         useApp.setState((s) => ({ hydrated: true, recipes: dedupeRecipes(s.recipes) }));

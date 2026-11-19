@@ -24,4 +24,10 @@ export const quip = {
   addedToList: (name: string) => pick([`${name} added. Don’t forget it in the car.`, `${name} is on the list.`, `${name} added — noted, chef.`]),
   deleted: (title: string) => pick([`Deleted ${title}. It had a good run.`, `${title} is gone. No hard feelings.`, `Bye, ${title}. 👋`]),
   sentRecipe: (to: string) => pick([`Sent to ${to} 💌 Subtle hint delivered.`, `Sent to ${to} 💌 The hint has been dropped.`, `${to} has been gently persuaded. 💌`]),
+  passed: (n: number) =>
+    n >= 3
+      ? pick(['Picky tonight! Want me to invent something from your fridge?', 'Three strikes. Let me cook something up from what you have.', 'Tough crowd. Shall I conjure a new idea?'])
+      : pick(['Fair. Next contestant…', 'Not feeling it? No problem.', 'Swiped. Here’s another.', 'Noted. The genie adapts.']),
+  locked: (title: string, partner: string | null) =>
+    partner ? pick([`${title} it is! I told ${partner}. 💌`, `Locked in. ${partner} has been informed.`]) : pick([`${title} it is! 🍽️`, 'Locked in. Dinner is decided. 🎉']),
 };

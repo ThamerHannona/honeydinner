@@ -241,6 +241,7 @@ export default function CookMode() {
               onPress={() => {
                 haptic.success();
                 usedUp.forEach((pid) => markUsed(pid));
+                useApp.getState().markCooked(recipe.id);
                 toast(usedUp.length ? `Nailed it! Removed ${usedUp.length} from your kitchen. 🤌` : quip.cooked(recipe.title));
                 goBack();
               }}

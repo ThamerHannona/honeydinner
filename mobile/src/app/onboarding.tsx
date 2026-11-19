@@ -1,15 +1,18 @@
 import { useTheme } from '@/lib/theme-context';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Keyboard, Share, TextInput, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, Linking, Share, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeInDown, FadeInRight, FadeOutLeft, useAnimatedStyle, useReducedMotion, withSpring } from 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
-import { ArrowLeft, Check, KeyRound, Share2, User, Users } from 'lucide-react-native';
+import { ArrowLeft, Camera, Check, KeyRound, Link2, Receipt, Share2, Sparkles, User, Users } from 'lucide-react-native';
+import { useMutation } from '@tanstack/react-query';
+import { askGenieForRecipes, ideaToDraft, type GenieIdea } from '@/lib/services/genie-recipes';
+import { starterRecipes } from '@/lib/mock-data';
 import { Logo } from '@/components/brand';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
-import { GenieDemo, ScanDemo, ShareDemo } from '@/components/onboarding-demos';
+import { ShareDemo } from '@/components/onboarding-demos';
 import { GenieBubble, HardShadow, Highlight, PressableScale, Txt } from '@/components/ui';
 import { createKitchen, joinKitchen } from '@/lib/household';
 import { DIETS } from '@/lib/services/genie-recipes';
@@ -17,8 +20,8 @@ import { toast, useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
 import type { Diet, RecipeLanguage } from '@/lib/types';
 
-type Step = 'welcome' | 'name' | 'household' | 'taste' | 'share' | 'scan' | 'genie' | 'nudges' | 'ready';
-const STEPS: Step[] = ['welcome', 'name', 'household', 'taste', 'share', 'scan', 'genie', 'nudges', 'ready'];
+type Step = 'welcome' | 'name' | 'taste' | 'save' | 'scan' | 'genie' | 'household' | 'nudges' | 'ready';
+const STEPS: Step[] = ['welcome', 'name', 'taste', 'save', 'scan', 'genie', 'household', 'nudges', 'ready'];
 
 type HouseMode = 'partner' | 'join' | 'solo' | null;
 
@@ -51,6 +54,20 @@ export default function Onboarding() {
   const [partner, setPartner] = useState<string>(members.find((m) => !m.isMe)?.name ?? '');
   const [code, setCode] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
+  const recipes = useApp((s) => s.recipes);
+  const pantry = useApp((s) => s.pantry);
+  const recipeBase = useRef(recipes.length);
+  const pantryBase = useRef(pantry.length);
+  const newRecipe = recipes.length > recipeBase.current ? recipes[0] : null;
+  const scannedCount = Math.max(0, pantry.length - pantryBase.current);
+  const [link, setLink] = useState<string>('');
+  const [idea, setIdea] = useState<GenieIdea | null>(null);
+  const [ideaSaved, setIdeaSaved] = useState<boolean>(false);
+  const genie = useMutation({
+    mutationFn: () => askGenieForRecipes({ diets, pantry, servings: 2, avoid: recipes.map((r) => r.title), mood: 'easy weeknight', lang: lang === 'original' ? 'en' : lang }),
+    onSuccess: (list) => { haptic.success(); setIdea(list[0] ?? null); useApp.getState().setGenieUsed(); },
+    onError: () => toast('The genie is napping. Try again in a sec.'),
+  });
 
   const idx = STEPS.indexOf(step);
   const first = name.trim().split(' ')[0] || 'friend';
@@ -134,15 +151,15 @@ export default function Onboarding() {
     () => ({
       welcome: 'Hi! I’m FridgeGenie. I live in your fridge. I judge nothing… except that yogurt from March.',
       name: 'I’ll remember it. Unlike that half onion in the back of the drawer.',
-      household: 'Ending the “I dunno, what do YOU want?” debate since 2026.',
+      household: 'Last step with people in it. Ending the “I dunno, what do YOU want?” debate since 2026.',
       taste: 'No judgment. Okay — a little judgment for pineapple on pizza.',
-      share: 'Stop screenshotting recipes. Your camera roll is 40% pasta and that’s a cry for help.',
-      scan: 'Yes, I can read “BNLS SKNLS CHKN BRST.” I speak fluent receipt.',
-      genie: 'I’ll use the spinach before it becomes a science project.',
+      save: newRecipe ? `“${newRecipe.title}”! Excellent taste. I’m saving that one to my brag folder.` : 'Go find a dinner on TikTok or Instagram. I’ll wait. I’m very good at waiting. I live in a fridge.',
+      scan: scannedCount ? `${scannedCount} things! ${pantry.slice(0, 2).map((p) => p.name).join(' and ')}… and hope. Workable.` : 'Show me the fridge. I promise not to comment on the mystery container. Much.',
+      genie: idea ? (ideaSaved ? 'Locked in. Look at us, deciding dinner like adults.' : 'Fresh from my brain. Want it tonight?') : 'Watch this. I’ll make dinner out of what you’ve got.',
       nudges: 'Only for emergencies. Like wilting cilantro.',
       ready: `${first}, your kitchen is ready. Let’s go make something worth bragging about.`,
     }),
-    [first],
+    [first, newRecipe, scannedCount, idea, ideaSaved, pantry],
   );
 
   const primary = (label: string, onPress: () => void, opts?: { disabled?: boolean; loading?: boolean; testID?: string }) => (
@@ -227,7 +244,7 @@ export default function Onboarding() {
     const joined = !!household && household.members.length > 1;
     body = (
       <View style={{ gap: 12 }}>
-        <Heading eyebrow="YOUR HOUSEHOLD" title="Who’s eating" hl="with you?" />
+        <Heading eyebrow="NOW BRING YOUR PERSON" title="Who’s eating" hl="with you?" />
         <Choice testID="house-partner" icon={<Users size={20} color={C.ink} />} title="Me + my partner" sub="Share recipes, pantry, groceries & votes" on={houseMode === 'partner'} onPress={() => { haptic.select(); setHouseMode('partner'); }} />
         <Choice testID="house-join" icon={<KeyRound size={20} color={C.ink} />} title="I have a kitchen code" sub="Someone already started our kitchen" on={houseMode === 'join'} onPress={() => { haptic.select(); setHouseMode('join'); }} />
         <Choice testID="house-solo" icon={<User size={20} color={C.ink} />} title="Just me (for now)" sub="Party of one. Respect." on={houseMode === 'solo'} onPress={() => { haptic.select(); setHouseMode('solo'); }} />
@@ -303,50 +320,107 @@ export default function Onboarding() {
     footer = primary(diets.length ? `Got it — ${diets.length} style${diets.length === 1 ? '' : 's'}` : 'I eat everything 😋', next);
   }
 
-  if (step === 'share') {
-    body = (
-      <View className="items-center">
-        <Heading eyebrow="HOW IT WORKS · 1 OF 3" title="See it on TikTok?" hl="Share it to me." />
+  if (step === 'save') {
+    const pasted = link.match(/https?:\/\/\S+/)?.[0] ?? '';
+    body = newRecipe ? (
+      <Animated.View entering={FadeInDown.springify().damping(12)} className="items-center">
+        <Heading eyebrow="YOUR FIRST RECIPE 🎉" title="Saved." hl="That was easy." />
+        <View className="w-full rounded-3xl p-4" style={{ backgroundColor: C.paper, borderWidth: 1.5, borderColor: C.ink }} testID="onboarding-saved-recipe">
+          <Txt display weight="bold" className="text-[22px] leading-[26px]">{newRecipe.title}</Txt>
+          <Txt weight="semibold" className="mt-1 text-[13px]" style={{ color: C.inkSoft }}>{newRecipe.steps.length} steps · {newRecipe.ingredients.length} ingredients · {newRecipe.cookTime} min</Txt>
+        </View>
+        <Txt weight="semibold" className="mt-4 text-center text-[14px]" style={{ color: C.inkSoft }}>Do this any time you see a dinner you like. Share → Honey, Dinner?</Txt>
+      </Animated.View>
+    ) : (
+      <View>
+        <Heading eyebrow="LET’S DO IT FOR REAL · 1 OF 3" title="Save your first" hl="recipe from TikTok." />
         <ShareDemo />
-        <View className="mt-4 w-full" style={{ gap: 6 }}>
-          {[
-            'In TikTok, Instagram or Facebook, tap Share',
-            'Tap Honey, Dinner? (not there? swipe → “More” → ⭐ add it)',
-            'I write it out step by step and save it',
-          ].map((t, i) => (
+        <View className="mt-3 w-full" style={{ gap: 6 }}>
+          {['Open TikTok or Instagram, find a dinner', 'Tap Share → Honey, Dinner? (not there? “More” → add it)', 'Come back here. I’ll be waiting'].map((t, i) => (
             <View key={t} className="flex-row items-center" style={{ gap: 10 }}>
               <View className="h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: C.ink }}><Txt weight="extrabold" style={{ color: C.cream, fontSize: 12 }}>{i + 1}</Txt></View>
               <Txt weight="semibold" className="flex-1 text-[14px]">{t}</Txt>
             </View>
           ))}
         </View>
+        <Txt label weight="extrabold" className="mb-2 mt-5 text-[12px]" style={{ color: C.leafDark, letterSpacing: 1.2 }}>OR PASTE A LINK</Txt>
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <TextInput testID="onboarding-link" value={link} onChangeText={setLink} placeholder="tiktok.com/… or instagram.com/…" placeholderTextColor={C.inkFaint} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={[inputStyle, { flex: 1, height: 50, borderRadius: 16, paddingHorizontal: 14, fontSize: 15 }]} />
+          <PressableScale testID="onboarding-grab-link" accessibilityRole="button" accessibilityLabel="Grab this recipe" disabled={!pasted} onPress={() => { haptic.tap(); router.push({ pathname: '/import-loading', params: { kind: 'link', url: pasted } }); }}>
+            <View className="h-[50px] w-[50px] items-center justify-center rounded-2xl" style={{ backgroundColor: pasted ? C.honey : C.paper, borderWidth: 1.5, borderColor: C.ink }}><Link2 size={20} color={C.ink} /></View>
+          </PressableScale>
+        </View>
       </View>
     );
-    footer = primary('Next', next);
+    footer = newRecipe
+      ? primary('Next: your fridge', next, { testID: 'onboarding-save-next' })
+      : (
+        <View style={{ gap: 4 }}>
+          {primary('Open TikTok', () => { haptic.tap(); void Linking.openURL('snssdk1233://').catch(() => Linking.openURL('https://www.tiktok.com/search?q=easy%20dinner%20recipe')); }, { testID: 'onboarding-open-tiktok' })}
+          {secondary('Skip — give me a sample recipe', () => { const sample = starterRecipes()[0]; if (sample && !recipes.some((r) => r.id === sample.id)) useApp.setState((s) => ({ recipes: [sample, ...s.recipes] })); next(); }, 'onboarding-skip-save')}
+        </View>
+      );
   }
 
   if (step === 'scan') {
-    body = (
-      <View className="items-center">
-        <Heading eyebrow="HOW IT WORKS · 2 OF 3" title="Snap your receipt." hl="I’ll stock the kitchen." />
-        <ScanDemo />
-        <Txt weight="semibold" className="mt-2 text-center text-[14px]" style={{ color: C.inkSoft }}>Tap + → Scan. Fridge photos work too. I’ll guess when things expire and nag you nicely.</Txt>
+    body = scannedCount ? (
+      <Animated.View entering={FadeInDown.springify().damping(12)}>
+        <Heading eyebrow="KITCHEN STOCKED 🧊" title={`${scannedCount} things`} hl="in the kitchen." />
+        <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+          {pantry.slice(0, 12).map((p) => (
+            <View key={p.id} className="rounded-full px-3 py-2" style={{ backgroundColor: C.paper, borderWidth: 1, borderColor: C.hairline }}><Txt weight="bold" className="text-[13px]">{p.emoji ?? '🥫'} {p.name}</Txt></View>
+          ))}
+        </View>
+        <Txt weight="semibold" className="mt-4 text-[14px]" style={{ color: C.inkSoft }}>I guessed expiry dates. I’ll nag you (nicely) before anything goes off.</Txt>
+      </Animated.View>
+    ) : (
+      <View>
+        <Heading eyebrow="LET’S DO IT FOR REAL · 2 OF 3" title="Show me" hl="your fridge." />
+        <View style={{ gap: 12 }}>
+          <Choice testID="onboarding-scan-fridge" icon={<Camera size={20} color={C.ink} />} title="Snap the fridge" sub="Door open, one photo. I’ll spot what’s there." on={false} onPress={() => { haptic.tap(); router.push({ pathname: '/scan', params: { mode: 'fridge' } }); }} />
+          <Choice testID="onboarding-scan-receipt" icon={<Receipt size={20} color={C.ink} />} title="Scan a grocery receipt" sub="I speak fluent “BNLS SKNLS CHKN BRST.”" on={false} onPress={() => { haptic.tap(); router.push({ pathname: '/scan', params: { mode: 'receipt' } }); }} />
+        </View>
       </View>
     );
-    footer = primary('Next', next);
+    footer = scannedCount ? primary('Next: dinner magic ✨', next, { testID: 'onboarding-scan-next' }) : secondary('Not near my fridge — skip', next, 'onboarding-skip-scan');
   }
 
   if (step === 'genie') {
     body = (
-      <View className="items-center">
-        <Heading eyebrow="HOW IT WORKS · 3 OF 3" title="“What can I make?”" hl="Ask me. Anytime." />
-        <GenieDemo partnerName={partnerFirst} />
-        <Txt weight="semibold" className="mt-2 text-center text-[14px]" style={{ color: C.inkSoft }}>
-          I cook from what you have, follow your eating style, and {partnerFirst ? `${partnerFirst} can vote` : 'your partner can vote'} on tonight’s pick.
-        </Txt>
+      <View>
+        <Heading eyebrow="LET’S DO IT FOR REAL · 3 OF 3" title="“What can I make?”" hl="Watch this." />
+        {!idea ? (
+          <View className="items-center py-4">
+            <AnimatedFridgeGenie size={130} mood={genie.isPending ? 'working' : 'idle'} testID="onboarding-genie-thinking" />
+            <Txt weight="semibold" className="mt-3 text-center text-[14px]" style={{ color: C.inkSoft }}>
+              {genie.isPending ? 'Rummaging through your fridge…' : pantry.length ? `I’ll use what you have${diets.length ? ' and stick to your eating style' : ''}.` : 'No fridge scan? I’ll improvise with pantry basics.'}
+            </Txt>
+          </View>
+        ) : (
+          <Animated.View entering={FadeInDown.springify().damping(12)} className="rounded-3xl p-4" style={{ backgroundColor: C.honey, borderWidth: 1.5, borderColor: C.ink }} testID="onboarding-genie-idea">
+            <Txt label weight="extrabold" className="text-[12px]" style={{ color: C.onHoney, letterSpacing: 1 }}>{idea.cookTime} MIN · {idea.tags.slice(0, 2).join(' · ').toUpperCase()}</Txt>
+            <Txt display weight="bold" className="mt-1 text-[24px] leading-[28px]" style={{ color: C.onHoney }}>{idea.title}</Txt>
+            <Txt weight="semibold" className="mt-2 text-[14px] leading-[20px]" style={{ color: C.onHoney }}>{idea.blurb}</Txt>
+            {idea.uses.length ? <Txt weight="bold" className="mt-3 text-[13px]" style={{ color: C.onHoney }}>Uses your {idea.uses.slice(0, 3).join(', ')}</Txt> : null}
+          </Animated.View>
+        )}
       </View>
     );
-    footer = primary('Next', next);
+    footer = !idea
+      ? (
+        <View style={{ gap: 4 }}>
+          {primary(genie.isPending ? 'Thinking…' : 'Make me dinner ✨', () => genie.mutate(), { loading: genie.isPending, testID: 'onboarding-ask-genie' })}
+          {secondary('Skip', next, 'onboarding-skip-genie')}
+        </View>
+      )
+      : ideaSaved
+        ? primary('Next', next, { testID: 'onboarding-genie-next' })
+        : (
+          <View style={{ gap: 4 }}>
+            {primary('Make it tonight 🍽️', () => { const id = useApp.getState().saveRecipe(ideaToDraft(idea), false); useApp.getState().lockTonight(id); haptic.success(); setIdeaSaved(true); }, { testID: 'onboarding-lock-idea' })}
+            {secondary('Another idea', () => { setIdea(null); genie.mutate(); }, 'onboarding-another-idea')}
+          </View>
+        );
   }
 
   if (step === 'nudges') {
@@ -378,7 +452,9 @@ export default function Onboarding() {
           {[
             household ? `✅ Kitchen ${household.code}${partnerFirst ? ` with ${partnerFirst}` : ''}` : houseMode === 'solo' ? '✅ Party of one (invite anyone later in Profile)' : '✅ Household set',
             diets.length ? `✅ Cooking ${diets.map((d) => DIETS.find((x) => x.id === d)?.label).join(' + ')}` : '✅ Eating everything (bold)',
-            '✅ Share from TikTok & Instagram ready',
+            newRecipe ? `✅ First recipe saved: ${newRecipe.title}` : '✅ Share from TikTok & Instagram ready',
+            scannedCount ? `✅ ${scannedCount} things in your kitchen` : '✅ Scan anytime: + → Scan',
+            ideaSaved && idea ? `✅ Tonight: ${idea.title}` : '✅ Genie on standby',
           ].map((t) => (
             <Txt key={t} weight="bold" className="text-center text-[15px]">{t}</Txt>
           ))}
@@ -400,8 +476,8 @@ export default function Onboarding() {
         <View className="flex-1 flex-row" style={{ gap: 4 }} accessible accessibilityLabel={`Step ${idx + 1} of ${STEPS.length}`} testID="onboarding-progress">
           {STEPS.map((s, i) => <Seg key={s} filled={i <= idx} />)}
         </View>
-        {idx >= 4 && step !== 'ready' ? (
-          <PressableScale testID="onboarding-skip" accessibilityLabel="Skip the tour" onPress={() => go('nudges')}>
+        {idx >= 3 && step !== 'ready' && step !== 'household' && step !== 'nudges' ? (
+          <PressableScale testID="onboarding-skip" accessibilityLabel="Skip the tour" onPress={() => go('household')}>
             <Txt weight="bold" className="px-1 text-[14px]" style={{ color: C.inkSoft }}>Skip</Txt>
           </PressableScale>
         ) : <View style={{ width: 40 }} />}
