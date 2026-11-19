@@ -6,10 +6,11 @@ import { useTheme } from '@/lib/theme-context';
 const SOURCES = {
   tiktok: require('../../assets/onboarding/share-tiktok.mp4'),
   instagram: require('../../assets/onboarding/share-instagram.mp4'),
+  add: require('../../assets/onboarding/add-to-share.mp4'),
 };
 
 /** Looping, muted walkthrough: TikTok/Instagram → Share → Honey, Dinner? → saved recipe. */
-export function ShareVideo({ platform, width = 236 }: { platform: 'tiktok' | 'instagram'; width?: number }) {
+export function ShareVideo({ platform, width = 236 }: { platform: 'tiktok' | 'instagram' | 'add'; width?: number }) {
   const { C } = useTheme();
   const player = useVideoPlayer(SOURCES[platform], (p) => {
     p.loop = true;

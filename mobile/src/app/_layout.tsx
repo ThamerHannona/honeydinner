@@ -51,6 +51,7 @@ function RootLayoutNav() {
         <Stack.Screen name="onboarding" options={{ animation: reducedMotion ? 'none' : 'fade' }} />
         <Stack.Screen name="sign-in" />
         <Stack.Screen name="invite" />
+        <Stack.Screen name="how-to-share" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="add-sheet" options={{ ...sheet, sheetAllowedDetents: [0.42] }} />
         <Stack.Screen name="pantry-add" options={{ ...sheet, sheetAllowedDetents: [0.85] }} />
         <Stack.Screen name="import" options={{ presentation: 'modal' }} />

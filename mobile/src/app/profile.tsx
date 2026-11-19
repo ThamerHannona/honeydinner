@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, ChevronRight, LogOut, RotateCcw, Sparkles, UserPlus } from 'lucide-react-native';
+import { Bell, Share2, ChevronRight, LogOut, RotateCcw, Sparkles, UserPlus } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow } from '@/components/ui';
@@ -112,6 +112,7 @@ export default function Profile() {
           ))}
           <Row testID="profile-invite" icon={<UserPlus size={19} color={C.leafDark} />} label={household ? `Our kitchen · ${household.code}` : 'Our kitchen — share with your partner'} tint={C.leafDark} onPress={() => router.push('/invite')} />
           <Row testID="profile-diet" icon={<Sparkles size={19} color={C.leafDark} />} label={diets.length ? `Eating style · ${diets.map((d) => DIETS.find((x) => x.id === d)?.label ?? d).join(', ')}` : 'Eating style — keto, paleo, plant-based…'} tint={C.leafDark} onPress={() => router.push('/genie-chef')} />
+          <Row testID="profile-how-to-share" icon={<Share2 size={19} color={C.leafDark} />} label="How to save from TikTok & Instagram" tint={C.leafDark} onPress={() => router.push('/how-to-share')} />
           <Row testID="profile-tour" icon={<Sparkles size={19} color={C.leafDark} />} label="Replay the tour (FridgeGenie insists)" tint={C.leafDark} onPress={() => router.push('/onboarding')} />
 
         </View>

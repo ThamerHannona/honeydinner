@@ -354,6 +354,9 @@ export default function Onboarding() {
             </View>
           ))}
         </View>
+        <PressableScale testID="onboarding-how-add" accessibilityRole="button" accessibilityLabel="How to add Honey, Dinner? to the share menu" onPress={() => router.push('/how-to-share')}>
+          <Txt weight="extrabold" className="mt-4 text-[14px]" style={{ color: C.leafDark, textDecorationLine: 'underline' }}>Don’t see Honey, Dinner? in the share menu? Watch how ›</Txt>
+        </PressableScale>
         <Txt label weight="extrabold" className="mb-2 mt-5 text-[12px]" style={{ color: C.leafDark, letterSpacing: 1.2 }}>OR PASTE A LINK</Txt>
         <View className="flex-row items-center" style={{ gap: 8 }}>
           <TextInput testID="onboarding-link" value={link} onChangeText={setLink} placeholder="tiktok.com/… or instagram.com/…" placeholderTextColor={C.inkFaint} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={[inputStyle, { flex: 1, height: 50, borderRadius: 16, paddingHorizontal: 14, fontSize: 15 }]} />
