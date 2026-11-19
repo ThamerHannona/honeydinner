@@ -104,7 +104,7 @@ export default function GenieChef() {
         {/* hero */}
         <View className="items-center px-6">
           <AnimatedFridgeGenie size={ask.isPending ? 132 : 118} mood={ask.isPending ? 'working' : 'idle'} testID="genie-chef-mascot" />
-          <Text accessibilityRole="header" style={{ fontFamily: 'CaveatBrush_400Regular', fontSize: 40, lineHeight: 46, color: C.ink, marginTop: 6, textAlign: 'center' }}>
+          <Text accessibilityRole="header" style={{ fontFamily: 'Fraunces_600SemiBold', fontSize: 36, lineHeight: 42, letterSpacing: -1.2, color: C.ink, marginTop: 6, textAlign: 'center' }}>
             What can I make?
           </Text>
           <View style={{ position: 'relative', paddingHorizontal: signature.highlight.padding, marginTop: 2 }}>

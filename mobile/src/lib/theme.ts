@@ -39,7 +39,7 @@ export const darkC: ThemeColors = {
 };
 export const plateTints = [C.plateWheat, C.plateSage, C.plateRose, C.plateLilac] as const;
 export const fonts = {
-  body: 'Inter_400Regular', medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold', bold: 'Inter_700Bold',
+  body: 'Nunito_500Medium', medium: 'Nunito_600SemiBold', semibold: 'Nunito_700Bold', bold: 'Nunito_800ExtraBold',
   display: 'Fraunces_600SemiBold', displayItalic: 'Fraunces_600SemiBold_Italic',
   label: 'BarlowCondensed_700Bold', logo: 'BarlowCondensed_800ExtraBold',
 } as const;

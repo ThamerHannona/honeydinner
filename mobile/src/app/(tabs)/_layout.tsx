@@ -62,26 +62,24 @@ function TabItem({
 }) {
   const { C } = useTheme();
   const personality = PERSONALITY[item.name] ?? 'hop';
-  const sx = useSharedValue(active ? 1.08 : 1);
-  const sy = useSharedValue(active ? 1.08 : 1);
+  const sx = useSharedValue(active ? 1.06 : 1);
+  const sy = useSharedValue(active ? 1.06 : 1);
   const ty = useSharedValue(active ? -2 : 0);
   const rot = useSharedValue(0);
-  const flip = useSharedValue(0);
   const blob = useSharedValue(active ? 1 : 0);
   const [fire, setFire] = useState(0);
   const wasActive = useRef(active);
 
   const celebrate = () => {
-    sx.value = withSequence(withSpring(1.34, boing), withSpring(1.08, settle));
-    sy.value = withSequence(withSpring(1.3, boing), withSpring(1.08, settle));
+    sx.value = withSequence(withSpring(1.22, boing), withSpring(1.06, settle));
+    sy.value = withSequence(withSpring(1.2, boing), withSpring(1.06, settle));
     switch (personality) {
       case 'hop':
         ty.value = withSequence(withTiming(-11, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(-2, boing));
         break;
       case 'flip':
-        flip.value = 0;
-        flip.value = withTiming(360, { duration: 520, easing: Easing.out(Easing.back(1.4)) });
-        ty.value = withSpring(-2, settle);
+        rot.value = withSequence(withTiming(10, { duration: 90 }), withTiming(-10, { duration: 100 }), withSpring(0, boing));
+        ty.value = withSequence(withTiming(-7, { duration: 120 }), withSpring(-2, settle));
         break;
       case 'shake':
         rot.value = withSequence(withTiming(-14, { duration: 70 }), withTiming(12, { duration: 80 }), withTiming(-8, { duration: 80 }), withTiming(5, { duration: 80 }), withSpring(0, settle));
@@ -110,13 +108,13 @@ function TabItem({
   }, [active]);
 
   const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: ty.value }, { perspective: 400 }, { rotateY: `${flip.value}deg` }, { rotate: `${rot.value}deg` }, { scaleX: sx.value }, { scaleY: sy.value }],
+    transform: [{ translateY: ty.value }, { rotate: `${rot.value}deg` }, { scaleX: sx.value }, { scaleY: sy.value }],
   }));
   const blobStyle = useAnimatedStyle(() => ({
-    opacity: blob.value > 0.02 ? 1 : 0,
-    transform: [{ scaleX: 0.4 + blob.value * 0.6 }, { scaleY: 0.2 + blob.value * 0.8 }],
+    opacity: Math.min(1, Math.max(0, blob.value)),
+    transform: [{ scaleX: Math.min(1.08, 0.5 + blob.value * 0.5) }, { scaleY: Math.min(1.08, 0.5 + blob.value * 0.5) }],
   }));
-  const labelStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + blob.value * 0.06 }] }));
+  const labelStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + Math.min(1, blob.value) * 0.04 }] }));
 
   return (
     <Pressable
@@ -136,8 +134,8 @@ function TabItem({
       onPressOut={() => {
         if (active) {
           // already here: a little wobble so it still feels alive
-          sx.value = withSequence(withSpring(1.2, boing), withSpring(1.08, settle));
-          sy.value = withSequence(withSpring(1.2, boing), withSpring(1.08, settle));
+          sx.value = withSequence(withSpring(1.14, boing), withSpring(1.06, settle));
+          sy.value = withSequence(withSpring(1.14, boing), withSpring(1.06, settle));
           ty.value = withSpring(-2, settle);
           rot.value = withSequence(withTiming(-6, { duration: 70 }), withSpring(0, boing));
         }
@@ -147,9 +145,9 @@ function TabItem({
         onPress();
       }}
     >
-      <View style={{ alignItems: 'center', gap: 3 }}>
-        <View style={{ alignItems: 'center', justifyContent: 'center', width: 52, height: 30 }}>
-          <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: 50, height: 30, borderRadius: 15, backgroundColor: C.honey, opacity: 0.32 }, blobStyle]} />
+      <View style={{ alignItems: 'center', gap: 4 }}>
+        <View style={{ alignItems: 'center', justifyContent: 'center', width: 54, height: 32 }}>
+          <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: 52, height: 30, borderRadius: 15, backgroundColor: C.honeySoft ?? C.honey }, blobStyle]} />
           <Sparks fire={fire} color={C.honey} />
           <Animated.View style={iconStyle}>
             <item.Icon size={23} strokeWidth={active ? 2.1 : 1.8} color={active ? C.ink : C.muted} fill={active ? C.honey : C.transparent} />

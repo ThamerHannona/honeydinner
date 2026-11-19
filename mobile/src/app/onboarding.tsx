@@ -12,7 +12,7 @@ import { askGenieForRecipes, ideaToDraft, type GenieIdea } from '@/lib/services/
 import { starterRecipes } from '@/lib/mock-data';
 import { Logo } from '@/components/brand';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
-import { ShareDemo } from '@/components/onboarding-demos';
+import { SHARE_STEPS, ShareDemo } from '@/components/onboarding-demos';
 import { GenieBubble, HardShadow, Highlight, PressableScale, Txt } from '@/components/ui';
 import { createKitchen, joinKitchen } from '@/lib/household';
 import { DIETS } from '@/lib/services/genie-recipes';
@@ -61,6 +61,7 @@ export default function Onboarding() {
   const newRecipe = recipes.length > recipeBase.current ? recipes[0] : null;
   const scannedCount = Math.max(0, pantry.length - pantryBase.current);
   const [link, setLink] = useState<string>('');
+  const [plat, setPlat] = useState<'tiktok' | 'instagram'>('tiktok');
   const [idea, setIdea] = useState<GenieIdea | null>(null);
   const [ideaSaved, setIdeaSaved] = useState<boolean>(false);
   const genie = useMutation({
@@ -206,8 +207,8 @@ export default function Onboarding() {
   if (step === 'welcome') {
     body = (
       <View className="flex-1 items-center justify-center">
-        <Logo size="lg" />
-        <View className="mt-2"><AnimatedFridgeGenie size={170} mood="idle" testID="onboarding-genie" /></View>
+        <Logo size="md" />
+        <View className="mt-1"><AnimatedFridgeGenie size={128} mood="idle" testID="onboarding-genie" /></View>
         <Txt display weight="bold" className="mt-4 text-center text-[34px] leading-[38px]" style={{ letterSpacing: -1.2 }}>Dinner, decided</Txt>
         <View className="mt-1"><Highlight style={{ fontSize: 34, lineHeight: 37 }}>together.</Highlight></View>
         <Txt className="mt-4 text-center text-[16px] leading-[23px]" style={{ color: C.inkSoft, maxWidth: 330 }}>
@@ -334,12 +335,21 @@ export default function Onboarding() {
     ) : (
       <View>
         <Heading eyebrow="LET’S DO IT FOR REAL · 1 OF 3" title="Save your first" hl="recipe from TikTok." />
-        <ShareDemo />
-        <View className="mt-3 w-full" style={{ gap: 6 }}>
-          {['Open TikTok or Instagram, find a dinner', 'Tap Share → Honey, Dinner? (not there? “More” → add it)', 'Come back here. I’ll be waiting'].map((t, i) => (
-            <View key={t} className="flex-row items-center" style={{ gap: 10 }}>
-              <View className="h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: C.ink }}><Txt weight="extrabold" style={{ color: C.cream, fontSize: 12 }}>{i + 1}</Txt></View>
-              <Txt weight="semibold" className="flex-1 text-[14px]">{t}</Txt>
+        <View className="mb-3 flex-row self-center rounded-full p-1" style={{ backgroundColor: C.paper, borderWidth: 1, borderColor: C.hairline }}>
+          {(['tiktok', 'instagram'] as const).map((k) => (
+            <PressableScale key={k} testID={`onboarding-plat-${k}`} accessibilityRole="tab" accessibilityState={{ selected: plat === k }} onPress={() => { haptic.select(); setPlat(k); }}>
+              <View className="rounded-full px-5 py-2" style={{ backgroundColor: plat === k ? C.ink : 'transparent' }}>
+                <Txt weight="extrabold" className="text-[14px]" style={{ color: plat === k ? C.cream : C.ink }}>{k === 'tiktok' ? 'TikTok' : 'Instagram'}</Txt>
+              </View>
+            </PressableScale>
+          ))}
+        </View>
+        <View className="items-center"><ShareDemo key={plat} platform={plat} /></View>
+        <View className="mt-4 w-full" style={{ gap: 10 }}>
+          {SHARE_STEPS[plat].map((t, i) => (
+            <View key={t} className="flex-row items-start" style={{ gap: 10 }}>
+              <View className="mt-0.5 h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: i === 3 ? C.honey : C.ink }}><Txt weight="extrabold" style={{ color: i === 3 ? C.onHoney : C.cream, fontSize: 12 }}>{i === 3 ? '★' : i + 1}</Txt></View>
+              <Txt weight="semibold" className="flex-1 text-[14px] leading-[20px]" style={{ color: i === 3 ? C.inkSoft : C.ink }}>{t}</Txt>
             </View>
           ))}
         </View>
@@ -356,7 +366,7 @@ export default function Onboarding() {
       ? primary('Next: your fridge', next, { testID: 'onboarding-save-next' })
       : (
         <View style={{ gap: 4 }}>
-          {primary('Open TikTok', () => { haptic.tap(); void Linking.openURL('snssdk1233://').catch(() => Linking.openURL('https://www.tiktok.com/search?q=easy%20dinner%20recipe')); }, { testID: 'onboarding-open-tiktok' })}
+          {primary(plat === 'tiktok' ? 'Open TikTok' : 'Open Instagram', () => { haptic.tap(); const app = plat === 'tiktok' ? 'snssdk1233://' : 'instagram://'; const web = plat === 'tiktok' ? 'https://www.tiktok.com/search?q=easy%20dinner%20recipe' : 'https://www.instagram.com/explore/tags/dinnerrecipe/'; void Linking.openURL(app).catch(() => Linking.openURL(web)); }, { testID: 'onboarding-open-app' })}
           {secondary('Skip — give me a sample recipe', () => { const sample = starterRecipes()[0]; if (sample && !recipes.some((r) => r.id === sample.id)) useApp.setState((s) => ({ recipes: [sample, ...s.recipes] })); next(); }, 'onboarding-skip-save')}
         </View>
       );
@@ -486,13 +496,13 @@ export default function Onboarding() {
       <KeyboardAwareScrollView bottomOffset={130} keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 22, paddingTop: 14, paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
         <Animated.View key={step} entering={reduced ? undefined : FadeInRight.springify().damping(18)} exiting={reduced ? undefined : FadeOutLeft.duration(140)} style={{ flexGrow: 1 }}>
           {body}
+          <Animated.View key={`g-${step}-${genieSays[step].length}`} entering={reduced ? undefined : FadeIn.delay(200).duration(300)} style={{ marginTop: 18 }}>
+            <GenieBubble testID="onboarding-genie-says" text={genieSays[step]} />
+          </Animated.View>
         </Animated.View>
       </KeyboardAwareScrollView>
 
-      <View style={{ paddingHorizontal: 22, paddingBottom: Math.max(insets.bottom, 18) + 6, gap: 12 }}>
-        <Animated.View key={`g-${step}`} entering={reduced ? undefined : FadeIn.delay(250).duration(300)}>
-          <GenieBubble testID="onboarding-genie-says" text={genieSays[step]} />
-        </Animated.View>
+      <View style={{ paddingHorizontal: 22, paddingTop: 10, paddingBottom: Math.max(insets.bottom, 18) + 6, gap: 12, borderTopWidth: 0.5, borderTopColor: C.hairline }}>
         {footer}
       </View>
     </View>

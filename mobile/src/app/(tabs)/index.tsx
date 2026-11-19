@@ -19,10 +19,10 @@ import { useApp } from '@/lib/store';
 
 /** Tonight heading only — Caveat Brush; other screens keep Fraunces. */
 const TONIGHT_SCRIPT = {
-  fontFamily: 'CaveatBrush_400Regular',
-  fontSize: 42,
-  lineHeight: 48,
-  letterSpacing: -0.5,
+  fontFamily: 'Fraunces_600SemiBold',
+  fontSize: 40,
+  lineHeight: 46,
+  letterSpacing: -1.4,
 } as const;
 
 
@@ -75,7 +75,7 @@ export default function TonightScreen() {
                 transform: [{ rotate: signature.highlight.rotate }],
               }}
             />
-            <Text style={[TONIGHT_SCRIPT, { color: C.onHoney, fontSize: 44, lineHeight: 50 }]}>honey?</Text>
+            <Text style={[TONIGHT_SCRIPT, { color: C.onHoney, fontFamily: 'Fraunces_600SemiBold_Italic', fontSize: 40, lineHeight: 46 }]}>honey?</Text>
           </View>
           <GenieBubble testID="fridgegenie-greeting-card" style={{ marginBottom: 14 }}>
             <Txt testID="fridgegenie-greeting" style={{ color: C.onGreen, fontSize: 14, lineHeight: 20 }}>{pantryGreeting(pantry)}</Txt>
