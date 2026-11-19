@@ -16,7 +16,7 @@ export function ShareVideo({ platform, width = 236 }: { platform: 'tiktok' | 'in
     p.muted = true;
     p.play();
   });
-  const height = Math.round((width * 960) / 540);
+  const height = Math.round((width * (platform === "tiktok" ? 1174 : 960)) / 540);
   return (
     <View testID={`share-video-${platform}`} style={{ width: width + 12, height: height + 12, borderRadius: 36, borderWidth: 6, borderColor: C.ink, overflow: 'hidden', backgroundColor: '#111', alignSelf: 'center' }}>
       <VideoView player={player} style={{ width, height }} contentFit="cover" nativeControls={false} allowsFullscreen={false} allowsPictureInPicture={false} />
