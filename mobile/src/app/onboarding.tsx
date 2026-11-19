@@ -12,7 +12,8 @@ import { askGenieForRecipes, ideaToDraft, type GenieIdea } from '@/lib/services/
 import { starterRecipes } from '@/lib/mock-data';
 import { Logo } from '@/components/brand';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
-import { SHARE_STEPS, ShareDemo } from '@/components/onboarding-demos';
+import { SHARE_STEPS } from '@/components/onboarding-demos';
+import { ShareVideo } from '@/components/share-video';
 import { GenieBubble, HardShadow, Highlight, PressableScale, Txt } from '@/components/ui';
 import { createKitchen, joinKitchen } from '@/lib/household';
 import { DIETS } from '@/lib/services/genie-recipes';
@@ -344,7 +345,7 @@ export default function Onboarding() {
             </PressableScale>
           ))}
         </View>
-        <View className="items-center"><ShareDemo key={plat} platform={plat} /></View>
+        <ShareVideo key={plat} platform={plat} />
         <View className="mt-4 w-full" style={{ gap: 10 }}>
           {SHARE_STEPS[plat].map((t, i) => (
             <View key={t} className="flex-row items-start" style={{ gap: 10 }}>
