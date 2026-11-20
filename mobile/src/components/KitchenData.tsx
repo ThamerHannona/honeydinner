@@ -1,3 +1,4 @@
+import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
 import React from 'react';
@@ -50,7 +51,7 @@ export function KitchenRecipeCard({ recipe, testID, detail }: { recipe: Recipe; 
     <PressableScale testID={testID} accessibilityRole="button" accessibilityLabel={`Open ${recipe.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id } })}>
       <View className="flex-row items-center rounded-2xl bg-white p-2.5" style={{ gap: 12, borderWidth: 1, borderColor: C.line }}>
         <View>
-          <Image source={{ uri: recipe.image }} contentFit="cover" accessibilityLabel={recipe.title} style={{ width: 94, height: 104, borderRadius: 12, backgroundColor: C.creamDeep }} />
+          <Image source={{ uri: recipe.image }} onError={() => reportBrokenPhoto(recipe.id, recipe.image)} contentFit="cover" accessibilityLabel={recipe.title} style={{ width: 94, height: 104, borderRadius: 12, backgroundColor: C.creamDeep }} />
           <View className="absolute bottom-1 left-1"><PlatformBadge platform={recipe.source.platform} size={24} /></View>
         </View>
         <View className="flex-1 py-1">

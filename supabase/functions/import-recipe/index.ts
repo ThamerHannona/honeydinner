@@ -434,6 +434,34 @@ async function imageAsDataUrl(url: string | null): Promise<string | null> {
   }
 }
 
+/** TikTok/IG cover links are signed and expire within days; keep our own copy in Storage. */
+async function persistCover(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  const base = Deno.env.get("SUPABASE_URL"), service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!base || !service || url.startsWith(base)) return url;
+  try {
+    const res = await fetchWithTimeout(url, { headers: { referer: "https://www.instagram.com/" } }, 10_000);
+    if (!res.ok) return null;
+    const type = (res.headers.get("content-type") ?? "image/jpeg").split(";")[0];
+    if (!/^image\//i.test(type)) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength < 1000) return null;
+    const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", buf))].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
+    const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+    const path = `covers/${hash}.${ext}`;
+    const up = await fetch(`${base}/storage/v1/object/step-images/${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${service}`, "content-type": type, "x-upsert": "true", "cache-control": "31536000" },
+      body: buf,
+    });
+    if (!up.ok) { log("cover upload", up.status); return url; }
+    return `${base}/storage/v1/object/public/step-images/${path}`;
+  } catch (e) {
+    log("cover persist failed", String(e));
+    return url;
+  }
+}
+
 async function withOpenAI(info: PostInfo, transcript: string | null, lang: string): Promise<Extracted | null> {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) return null;
@@ -515,7 +543,15 @@ Deno.serve(async (req) => {
     const cached = body?.fresh ? null : await cacheGet(cacheKey);
     if (cached) {
       log("cache hit", url);
-      return json({ recipe: cached.recipe, method: cached.method });
+      const rec = cached.recipe as RecipeDraft;
+      if (rec?.image && !rec.image.includes('/storage/v1/object/public/')) {
+        const kept = await persistCover(rec.image);
+        if (kept && kept !== rec.image) {
+          rec.image = kept;
+          await cachePut([cacheKey], rec, cached.method).catch(() => {});
+        }
+      }
+      return json({ recipe: rec, method: cached.method });
     }
 
     const info = await getPostInfo(url);
@@ -545,7 +581,7 @@ Deno.serve(async (req) => {
 
     const draft: RecipeDraft = {
       title: recipe.title,
-      image: info.thumbnail ?? DEFAULT_IMAGE,
+      image: (await persistCover(info.thumbnail)) ?? DEFAULT_IMAGE,
       servings: recipe.servings ?? 2,
       cookTime: recipe.cookTime ?? 30,
       ingredients: recipe.ingredients,

@@ -1,3 +1,4 @@
+import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import { useTheme } from '@/lib/theme-context';
 import { goBack } from '@/lib/nav';
 import React, { useMemo, useState } from 'react';
@@ -63,12 +64,11 @@ export default function RecipeDetail() {
   return (
     <View className="flex-1 bg-cream" testID="recipe-detail-screen">
       <ScrollView testID="recipe-detail-scroll" contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
-        <View testID="recipe-hero" className="items-center" style={{ backgroundColor: C.leafSoft, paddingTop: insets.top + 28, paddingBottom: 28 }}>
+        <View testID="recipe-hero" className="items-center" style={{ backgroundColor: C.leafSoft, paddingTop: insets.top + 70, paddingBottom: 28 }}>
           <View style={{ width: diameter, height: diameter, borderRadius: diameter / 2, borderWidth: 1.5, borderColor: C.ink, padding: 12, backgroundColor: C.white }}>
-            <Image testID="recipe-photo" accessibilityRole="image" accessibilityLabel={recipe.title} source={{ uri: recipe.image }} style={{ width: '100%', height: '100%', borderRadius: diameter / 2, borderWidth: 1, borderColor: C.ink, backgroundColor: C.leafSoft }} contentFit="cover" transition={200} />
+            <Image testID="recipe-photo" accessibilityRole="image" accessibilityLabel={recipe.title} source={{ uri: recipe.image }} onError={() => reportBrokenPhoto(recipe.id, recipe.image)} style={{ width: '100%', height: '100%', borderRadius: diameter / 2, borderWidth: 1, borderColor: C.ink, backgroundColor: C.leafSoft }} contentFit="cover" transition={200} />
           </View>
-          <View className="absolute bottom-4 right-5 rounded-lg bg-white px-2 py-1"><Txt label weight="extrabold" className="text-[13px] tracking-wider">PHOTO</Txt></View>
-          <View className="absolute left-5 right-5 flex-row justify-between" style={{ top: insets.top + 12 }} pointerEvents="box-none">
+                    <View className="absolute left-5 right-5 flex-row justify-between" style={{ top: insets.top + 12 }} pointerEvents="box-none">
             <PressableScale testID="recipe-back" accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? goBack() : router.replace('/recipes'))}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><ChevronLeft size={24} color={C.ink} /></View>
             </PressableScale>

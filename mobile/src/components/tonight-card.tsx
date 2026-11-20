@@ -1,3 +1,4 @@
+import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
@@ -68,7 +69,7 @@ export function TonightCard({
               </View>
               <PressableScale testID="suggestion-0" accessibilityRole="button" accessibilityLabel={`Open ${recipe.title}`} onPress={open} style={{ marginTop: -30, marginRight: -13 }}>
                 <View className="items-center justify-center rounded-full bg-white p-2" style={{ width: 176, height: 176 }}>
-                  <Image testID="suggestion-photo-0" source={{ uri: recipe.image }} accessibilityLabel={recipe.title} contentFit="cover" style={{ width: 158, height: 158, borderRadius: 79, borderWidth: 1.5, borderColor: C.ink }} transition={200} />
+                  <Image testID="suggestion-photo-0" source={{ uri: recipe.image }} onError={() => reportBrokenPhoto(recipe.id, recipe.image)} accessibilityLabel={recipe.title} contentFit="cover" style={{ width: 158, height: 158, borderRadius: 79, borderWidth: 1.5, borderColor: C.ink }} transition={200} />
                 </View>
               </PressableScale>
             </View>

@@ -1,3 +1,4 @@
+import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
 import { signature } from '@/lib/theme';
@@ -111,7 +112,7 @@ export default function TonightScreen() {
           <View className="mb-3 flex-row items-center justify-between"><Txt label weight="extrabold" className="text-[15px] uppercase tracking-wider">Or, something different</Txt><ArrowUpRight size={17} color={C.inkSoft} /></View>
           {suggestions.slice(1).map(({ recipe, match }, i) => <PressableScale key={recipe.id} revealIndex={i} testID={`suggestion-${i + 1}`} accessibilityRole="button" accessibilityLabel={`Open ${recipe.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id } })}>
             <View className="flex-row items-center border-t border-cream-line py-3" style={{ gap: 12 }}>
-              <Image source={{ uri: recipe.image }} style={{ width: 54, height: 54, borderRadius: 27, borderWidth: 1, borderColor: C.ink }} />
+              <Image source={{ uri: recipe.image }} onError={() => reportBrokenPhoto(recipe.id, recipe.image)} style={{ width: 54, height: 54, borderRadius: 27, borderWidth: 1, borderColor: C.ink }} />
               <View className="flex-1"><Txt display weight="bold" className="text-[18px] leading-[22px]">{recipe.title}</Txt><Txt className="mt-1 text-[12px] text-ink-soft">{recipe.cookTime} min · {match.have}/{match.total} in your kitchen</Txt></View>
               <ArrowUpRight size={18} color={C.ink} />
             </View>

@@ -1,3 +1,4 @@
+import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
 import React, { useMemo, useRef, useState } from 'react';
@@ -112,7 +113,7 @@ export default function RecipesScreen() {
                 return (
                   <PressableScale key={recipe.id} revealIndex={index} testID={`recipe-card-${recipe.id}`} accessibilityRole="button" accessibilityLabel={`Open ${recipe.title}, ${recipe.cookTime} minutes, ${missing === 0 ? 'can make now' : `missing ${missing} ingredients`}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id } })} onLongPress={() => { haptic.tap(); setPendingDelete({ id: recipe.id, title: recipe.title }); }} delayLongPress={350}>
                     <View className="overflow-hidden" style={{ height: (index + column) % 2 === 0 ? 216 : 174, borderRadius: 23, borderWidth: 1.5, borderColor: C.ink, backgroundColor: pastel, padding: 10 }}>
-                      <Image testID={`recipe-photo-${recipe.id}`} source={{ uri: recipe.image }} contentFit="cover" accessibilityLabel={recipe.title} style={{ flex: 1, borderRadius: 15 }} transition={180} />
+                      <Image testID={`recipe-photo-${recipe.id}`} source={{ uri: recipe.image }} onError={() => reportBrokenPhoto(recipe.id, recipe.image)} contentFit="cover" accessibilityLabel={recipe.title} style={{ flex: 1, borderRadius: 15 }} transition={180} />
                       <View className="absolute left-2.5 top-2.5 rounded-full bg-white px-2.5 py-1">
                         <Txt label weight="extrabold" style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>{SOURCES.find((item) => item.id === recipe.source.platform)?.label}</Txt>
                       </View>

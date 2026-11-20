@@ -29,3 +29,12 @@ export function useGeniePhotos() {
     return () => sub.remove();
   }, []);
 }
+
+const reported = new Set<string>();
+/** TikTok/Instagram cover links expire after a few days. When one fails to load, swap in a freshly drawn photo of the dish. */
+export function reportBrokenPhoto(recipeId: string, url?: string | null) {
+  if (!url || reported.has(recipeId)) return;
+  if (!/tiktokcdn|tiktokv|ibyteimg|muscdn|cdninstagram|fbcdn|tikwm/i.test(url)) return;
+  reported.add(recipeId);
+  useApp.getState().updateRecipe(recipeId, { image: GENIE_PLACEHOLDER });
+}
