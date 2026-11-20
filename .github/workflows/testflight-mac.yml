@@ -31,7 +31,14 @@ jobs:
           xcode-version: latest-stable
       - run: bun install --frozen-lockfile || bun install
       - name: Build IPA locally
-        run: npx eas-cli@latest build --local --platform ios --profile production --non-interactive --output ${{ github.workspace }}/app.ipa
+        run: |
+          set -o pipefail
+          npx eas-cli@latest build --local --platform ios --profile production --non-interactive --output ${{ github.workspace }}/app.ipa 2>&1 | tee ${{ github.workspace }}/build.log
+          # A half-prebuilt React Native (prebuilt core + source-built deps) built fine but crashed on launch (build 39). Refuse to ship that.
+          if grep -q "No prebuilt artifacts found, reverting to building from source" ${{ github.workspace }}/build.log; then
+            echo "::error::React Native prebuilt download failed — refusing to ship a mixed build. Re-run the job."
+            exit 1
+          fi
       - name: Submit to TestFlight
         run: npx eas-cli@latest submit --platform ios --profile production --path ${{ github.workspace }}/app.ipa --non-interactive --wait
       - uses: actions/upload-artifact@v4
