@@ -48,10 +48,10 @@ const cleanName = (n: unknown) => String(n ?? "").trim().slice(0, 40);
 const cleanId = (n: unknown) => String(n ?? "").trim().slice(0, 80);
 
 async function members(householdId: string) {
-  const rows = await rest(`hd_devices?select=member_id,name,last_seen&household_id=eq.${householdId}&order=created_at.asc`);
+  const rows = await rest(`hd_devices?select=member_id,name,last_seen&household_id=eq.${householdId}&order=last_seen.desc.nullslast`);
   // one entry per member (a person may re-join from a reinstall)
   const seen = new Map<string, { memberId: string; name: string }>();
-  for (const r of rows as { member_id: string; name: string }[]) seen.set(r.member_id, { memberId: r.member_id, name: r.name });
+  for (const r of rows as { member_id: string; name: string }[]) if (!seen.has(r.member_id)) seen.set(r.member_id, { memberId: r.member_id, name: r.name });
   return [...seen.values()];
 }
 

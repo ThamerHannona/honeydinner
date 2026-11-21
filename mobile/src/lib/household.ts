@@ -71,7 +71,10 @@ function myName(): string {
 
 /** Show the partner's real name locally once they've joined. */
 function adoptPartner(members: HouseholdMember[], myId: string) {
-  const partner = members.find((m) => m.memberId !== myId && m.name.trim());
+  // Skip my own old installs (same name as me) and pick the most recently active other person.
+  const me = myName().trim().toLowerCase();
+  const others = members.filter((m) => m.memberId !== myId && m.name.trim());
+  const partner = others.find((m) => m.name.trim().toLowerCase() !== me) ?? others[0];
   if (!partner) return;
   const current = useApp.getState().members.find((m) => !m.isMe);
   if (current?.name !== partner.name) useApp.getState().invitePartner(partner.name);
