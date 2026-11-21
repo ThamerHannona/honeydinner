@@ -1,14 +1,14 @@
 import { useTheme } from '@/lib/theme-context';
 import { goBack } from '@/lib/nav';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, SlideInLeft, SlideInRight, useAnimatedStyle, withTiming, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import { Check, ChevronLeft, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Check, ChevronLeft, ListOrdered, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useCookVoice, type VoiceCommand } from '@/lib/cook-voice';
 import { useStepImages } from '@/lib/services/step-images';
@@ -60,6 +60,7 @@ export default function CookMode() {
   const recipe = useApp((s) => s.recipes.find((r) => r.id === recipeId));
   const insets = useSafeAreaInsets();
   const [idx, setIdx] = useState<number>(0);
+  const [showAll, setShowAll] = useState<boolean>(false);
   const [dir, setDir] = useState<1 | -1>(1);
   const steps = recipe?.steps ?? [];
   const total = steps.length;
@@ -126,6 +127,33 @@ export default function CookMode() {
   return (
     <View className="flex-1" style={{ backgroundColor: C.night }} testID="cook-mode-screen">
       <StatusBar style="light" backgroundColor={C.night} />
+      <Modal visible={showAll} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAll(false)}>
+        <View className="flex-1 bg-cream" testID="cook-all-sheet">
+          <View className="flex-row items-center justify-between px-5 pb-2 pt-5">
+            <Txt display weight="bold" className="flex-1 text-[24px] leading-[28px]" numberOfLines={2}>{recipe.title}</Txt>
+            <PressableScale testID="cook-all-close" accessibilityLabel="Close" onPress={() => setShowAll(false)}>
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-white"><X size={20} color={C.ink} /></View>
+            </PressableScale>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 30 }}>
+            <Txt label weight="extrabold" className="mb-2 mt-3 text-[13px]" style={{ color: C.leafDark, letterSpacing: 1.2 }}>INGREDIENTS</Txt>
+            {recipe.ingredients.map((ing, i) => (
+              <Txt key={`i${i}`} weight="semibold" className="py-1 text-[16px]">• {ing.qty ? `${ing.qty} ${ing.unit ?? ''} `.replace(/\s+/g, ' ') : ''}{ing.name}</Txt>
+            ))}
+            <Txt label weight="extrabold" className="mb-1 mt-6 text-[13px]" style={{ color: C.leafDark, letterSpacing: 1.2 }}>STEPS · TAP ONE TO JUMP THERE</Txt>
+            {recipe.steps.map((st, i) => (
+              <PressableScale key={`s${i}`} testID={`cook-all-step-${i}`} accessibilityRole="button" accessibilityLabel={`Go to step ${i + 1}`} onPress={() => { setShowAll(false); go(i); }}>
+                <View className="flex-row border-b border-cream-line py-3" style={{ gap: 12, opacity: i < idx ? 0.55 : 1 }}>
+                  <View className="h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: i === idx ? C.ink : C.honey }}>
+                    <Txt weight="extrabold" className="text-[13px]" style={{ color: i === idx ? C.cream : C.onHoney }}>{i + 1}</Txt>
+                  </View>
+                  <Txt weight="semibold" className="flex-1 text-[16px] leading-6">{st}</Txt>
+                </View>
+              </PressableScale>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
       <View style={{ paddingTop: insets.top + 8 }} className="px-5">
         <View className="flex-row items-center justify-between">
           <PressableScale testID="cook-close" accessibilityLabel="Exit cooking mode" onPress={() => goBack()}>
@@ -140,6 +168,11 @@ export default function CookMode() {
             </Txt>
           </View>
           <View className="flex-row" style={{ gap: 8 }}>
+            <PressableScale testID="cook-all-steps" accessibilityLabel="Read the whole recipe" onPress={() => { haptic.tap(); setShowAll(true); }}>
+              <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.timerTrack }}>
+                <ListOrdered size={20} color={C.onInk} />
+              </View>
+            </PressableScale>
             <PressableScale
               testID="cook-voice-toggle"
               accessibilityLabel={voice.speakOn ? 'Mute read-aloud' : 'Read steps aloud'}
