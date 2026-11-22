@@ -3,6 +3,7 @@
 // step never costs twice.
 import { useEffect, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { plusErrorFromResponse, plusHeaders } from '@/lib/plus';
 import type { Recipe } from '@/lib/types';
 
 const inFlight = new Map<string, Promise<string | null>>();
@@ -31,18 +32,20 @@ async function requestStepImage(recipe: Recipe, index: number): Promise<string |
   try {
     const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/step-image`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', apikey: key, authorization: `Bearer ${key}` },
+      headers: plusHeaders({ 'content-type': 'application/json', apikey: key, authorization: `Bearer ${key}` }),
       body: JSON.stringify({
         title: recipe.title,
         step,
         index,
         total: recipe.steps.length,
         ingredients: recipe.ingredients.map((i) => i.name).slice(0, 15),
+        recipeId: recipe.id,
       }),
       signal: ac.signal,
     });
-    if (!res.ok) return null;
     const data = await res.json().catch(() => null);
+    if (plusErrorFromResponse(res.status, data, 'cook')) return null;
+    if (!res.ok) return null;
     return urlFromStepImageResponse(data);
   } catch {
     return null;
@@ -57,13 +60,13 @@ export type StepImageStatus = {
 };
 
 /** Loads the illustration for `index` and pre-loads the next one. */
-export function useStepImages(recipe: Recipe | undefined, index: number): StepImageStatus {
+export function useStepImages(recipe: Recipe | undefined, index: number, enabled = true): StepImageStatus {
   const setStepImage = useApp((s) => s.setStepImage);
   const stored = recipe?.stepImages?.[index] ?? null;
   const [local, setLocal] = useState<Record<number, string | 'failed'>>({});
 
   useEffect(() => {
-    if (!recipe) return;
+    if (!recipe || !enabled) return;
     const recipeId = String(recipe.id);
     let cancelled = false;
 
@@ -95,7 +98,7 @@ export function useStepImages(recipe: Recipe | undefined, index: number): StepIm
     return () => {
       cancelled = true;
     };
-  }, [recipe, index, setStepImage]);
+  }, [recipe, index, setStepImage, enabled]);
 
   const fromLocal = local[index];
   const url = (typeof fromLocal === 'string' && fromLocal !== 'failed' ? fromLocal : null) ?? stored ?? null;

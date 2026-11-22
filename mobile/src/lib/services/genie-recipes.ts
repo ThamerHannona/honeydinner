@@ -1,4 +1,5 @@
 import type { Diet, PantryItem, RecipeDraft } from '@/lib/types';
+import { plusHeaders } from '@/lib/plus';
 
 export interface GenieIdea {
   title: string;
@@ -80,7 +81,7 @@ export async function dishPhoto(idea: { title: string; ingredients: { name: stri
   try {
     const res = await fetch(`${base()}/functions/v1/step-image`, {
       method: 'POST',
-      headers: headers(),
+      headers: plusHeaders(headers()),
       body: JSON.stringify({
         title: idea.title,
         step: 'The finished dish, beautifully plated on a ceramic plate, ready to serve.',

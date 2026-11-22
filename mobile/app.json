@@ -91,7 +91,8 @@
           "microphonePermission": "Honey, Dinner? listens for \u201cnext\u201d, \u201cback\u201d and \u201cstart timer\u201d so you can cook hands-free.",
           "speechRecognitionPermission": "Honey, Dinner? understands voice commands like \u201cnext step\u201d while you cook."
         }
-      ]
+      ],
+      "./plugins/with-strip-unused-permissions"
     ],
     "experiments": {
       "typedRoutes": true

@@ -11,6 +11,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { Check, ChevronLeft, ListOrdered, Mic, MicOff, Pause, Play, RotateCcw, Sun, Timer, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useCookVoice, type VoiceCommand } from '@/lib/cook-voice';
+import { openPaywall } from '@/lib/plus';
 import { useStepImages } from '@/lib/services/step-images';
 import { AnimatedFridgeGenie } from '@/components/brand';
 import { Button, PressableScale, Txt, AView } from '@/components/ui';
@@ -87,7 +88,12 @@ export default function CookMode() {
     const mins = findTimerMinutes(text);
     return `Step ${i + 1}. ${text}${mins && voice.listening ? ` Say "start timer" for a ${mins} minute timer.` : ''}`;
   };
+  const isPlus = useApp((s) => s.isPlus);
+  const freeCookRecipeId = useApp((s) => s.freeCookRecipeId);
+  const extrasAllowed = !!isPlus || !freeCookRecipeId || freeCookRecipeId === String(recipeId);
   const voice = useCookVoice({
+    recipeId,
+    extrasAllowed,
     onCommand: (cmd: VoiceCommand) => {
       haptic.tap();
       if (cmd === 'next') go(idx + 1);
@@ -106,7 +112,7 @@ export default function CookMode() {
     voice.say(done ? 'Dinner is served. Enjoy!' : stepLine(idx));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, done, voice.speakOn]);
-  const stepImageState = useStepImages(recipe, idx);
+  const stepImageState = useStepImages(recipe, idx, extrasAllowed);
   const stepImage = stepImageState.url;
   const hideStepImageBox = stepImageState.failed && !stepImage;
 
@@ -176,7 +182,10 @@ export default function CookMode() {
             <PressableScale
               testID="cook-voice-toggle"
               accessibilityLabel={voice.speakOn ? 'Mute read-aloud' : 'Read steps aloud'}
-              onPress={() => voice.setSpeakOn(!voice.speakOn)}>
+              onPress={() => {
+                if (!extrasAllowed) { openPaywall('cook'); return; }
+                voice.setSpeakOn(!voice.speakOn);
+              }}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.timerTrack }}>
                 {voice.speakOn ? <Volume2 size={20} color={C.onInk} /> : <VolumeX size={20} color={C.onInk + '99'} />}
               </View>
@@ -201,6 +210,15 @@ export default function CookMode() {
         <Txt label weight="extrabold" className="mt-3 text-[15px] uppercase tracking-widest" numberOfLines={1} style={{ color: C.onInk + '80' }}>
           {done ? recipe.title : `Step ${idx + 1} of ${total} · ${recipe.title}`}
         </Txt>
+        {!extrasAllowed ? (
+          <PressableScale testID="cook-plus-banner" accessibilityRole="button" onPress={() => openPaywall('cook')}>
+            <View className="mt-3 rounded-full px-3 py-2" style={{ backgroundColor: C.honey }}>
+              <Txt weight="extrabold" className="text-center text-[13px]" style={{ color: C.onHoney }}>
+                Voice and step pictures come with Plus
+              </Txt>
+            </View>
+          </PressableScale>
+        ) : null}
       </View>
 
       <ScrollView testID="cook-step-content" style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }} showsVerticalScrollIndicator={false}>

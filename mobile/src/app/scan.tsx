@@ -13,6 +13,7 @@ import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { ScanProgress } from '@/components/scan-progress';
 import { Button, PressableScale, Txt } from '@/components/ui';
 import { scanFridge, scanReceipt, type ScanPhoto } from '@/lib/services/kitchen-ai';
+import { PlusRequiredError } from '@/lib/plus';
 import { useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
 
@@ -37,6 +38,11 @@ export default function ScanScreen() {
       haptic.success();
       setScanDraft(items);
       router.replace({ pathname: '/scan-review', params: { mode } });
+    },
+    onError: (err) => {
+      if (err instanceof PlusRequiredError) {
+        router.push({ pathname: '/plus', params: { reason: 'scan' } });
+      }
     },
   });
   const busy = scan.isPending;
@@ -124,7 +130,9 @@ export default function ScanScreen() {
       <View className="py-4" testID="scan-hint">
         {scan.isError ? (
           <Txt testID="scan-error" weight="bold" className="text-[14px]" style={{ color: '#B23A26' }}>
-            Couldn’t read that one. Try again with better light, the whole receipt in frame, and no glare.
+            {scan.error instanceof PlusRequiredError
+              ? "You've used this week's free scans. Plus unlocks as many as you need."
+              : 'Couldn’t read that one. Try again with better light, the whole receipt in frame, and no glare.'}
           </Txt>
         ) : (
           <Txt className="text-[13px] leading-[19px]" style={{ color: C.inkSoft }}>

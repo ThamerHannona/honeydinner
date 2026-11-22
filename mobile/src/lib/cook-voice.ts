@@ -10,6 +10,8 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
+import { plusErrorFromResponse, plusHeaders } from '@/lib/plus';
+import { useApp } from '@/lib/store';
 
 export type VoiceCommand = 'next' | 'back' | 'repeat' | 'timer-start' | 'timer-stop' | 'ingredients';
 
@@ -69,10 +71,26 @@ async function rememberAudio(key: string, url: string): Promise<string> {
   }
 }
 
-async function fetchCookSpeech(text: string): Promise<string | null> {
+const PLUS_BLOCKED = 'plus-blocked';
+
+function cookExtrasBlocked(recipeId?: string): boolean {
+  const s = useApp.getState();
+  if (s.isPlus) return false;
+  if (!s.freeCookRecipeId) return false;
+  return !!recipeId && s.freeCookRecipeId !== recipeId;
+}
+
+async function fetchCookSpeech(text: string, recipeId?: string): Promise<string | typeof PLUS_BLOCKED | null> {
+  if (cookExtrasBlocked(recipeId)) return PLUS_BLOCKED;
   const key = hashText(text.trim());
   const hit = await cachedUri(key);
-  if (hit) return hit;
+  if (hit) {
+    const recId = recipeId?.trim();
+    if (recId && !useApp.getState().isPlus && !useApp.getState().freeCookRecipeId) {
+      useApp.getState().setFreeCookRecipeId(recId);
+    }
+    return hit;
+  }
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   if (!base || !anon) return null;
@@ -81,17 +99,21 @@ async function fetchCookSpeech(text: string): Promise<string | null> {
   try {
     const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/cook-speech`, {
       method: 'POST',
-      headers: {
+      headers: plusHeaders({
         'content-type': 'application/json',
         apikey: anon,
         authorization: `Bearer ${anon}`,
-      },
-      body: JSON.stringify({ text, voice: 'coral', speed: 1.1 }),
+      }),
+      body: JSON.stringify({ text, voice: 'coral', speed: 1.1, recipeId }),
       signal: ctrl.signal,
     });
-    if (!res.ok) return null;
-    const body = await res.json().catch(() => null) as { url?: string } | null;
+    const body = await res.json().catch(() => null) as { url?: string; error?: string; feature?: string } | null;
+    if (plusErrorFromResponse(res.status, body, 'cook')) return PLUS_BLOCKED;
     if (!body?.url) return null;
+    const recId = recipeId?.trim();
+    if (recId && !useApp.getState().isPlus && !useApp.getState().freeCookRecipeId) {
+      useApp.getState().setFreeCookRecipeId(recId);
+    }
     return await rememberAudio(key, body.url);
   } catch {
     return null;
@@ -146,11 +168,16 @@ function fallbackSpeak(text: string, onDone: () => void) {
 
 type Options = {
   onCommand: (cmd: VoiceCommand) => void;
+  recipeId?: string;
+  extrasAllowed?: boolean;
 };
 
-export function useCookVoice({ onCommand }: Options) {
-  const [speakOn, setSpeakOn] = useState<boolean>(true);
+export function useCookVoice({ onCommand, recipeId, extrasAllowed = true }: Options) {
+  const [speakOn, setSpeakOn] = useState<boolean>(!!extrasAllowed);
+  const recipeIdRef = useRef(recipeId);
+  recipeIdRef.current = recipeId;
   const [listening, setListening] = useState<boolean>(false);
+  useEffect(() => { if (!extrasAllowed) setSpeakOn(false); }, [extrasAllowed]);
   const [heard, setHeard] = useState<string>('');
   const speakingRef = useRef<boolean>(false);
   const listeningRef = useRef<boolean>(false);
@@ -194,8 +221,12 @@ export function useCookVoice({ onCommand }: Options) {
       void (async () => {
         try {
           await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false }).catch(() => undefined);
-          const uri = await fetchCookSpeech(text);
+          const uri = await fetchCookSpeech(text, recipeIdRef.current);
           if (gen !== speakGen.current) return;
+          if (uri === PLUS_BLOCKED) {
+            speakingRef.current = false;
+            return;
+          }
           if (!uri) {
             fallbackSpeak(text, () => finishSpeak(gen));
             return;

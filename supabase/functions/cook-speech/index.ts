@@ -4,9 +4,11 @@
 // Secrets: OPENAI_API_KEY (required). SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // are provided by the edge runtime automatically.
 
+import { consumeUsage, gateUsage } from "../_shared/plus.ts";
+
 const cors: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-hd-app-user-id",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 const json = (d: unknown, status = 200) =>
@@ -53,9 +55,12 @@ Deno.serve(async (req) => {
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!key || !base || !service) return json({ error: "Not configured" }, 500);
 
-    const body = await req.json().catch(() => null) as { text?: unknown; voice?: unknown } | null;
+    const body = await req.json().catch(() => null) as { text?: unknown; voice?: unknown; recipeId?: unknown } | null;
     const text = String(body?.text ?? "").trim().slice(0, 4000);
     if (!text) return json({ error: "Missing text" }, 400);
+    const recipeId = typeof body?.recipeId === "string" ? body.recipeId : null;
+    const blocked = await gateUsage(req, "cook", { cors, recipeId });
+    if (blocked) return blocked;
     const requested = String(body?.voice ?? "coral").toLowerCase();
     const voice = VOICES.has(requested) ? requested : "coral";
     const speedRaw = Number((body as { speed?: unknown } | null)?.speed ?? 1.1);
@@ -64,7 +69,7 @@ Deno.serve(async (req) => {
     const path = `${await sha(`v2|${voice}|${speed}|${text}`)}.mp3`;
     const publicUrl = `${base}/storage/v1/object/public/${BUCKET}/${path}`;
     const head = await fetch(publicUrl, { method: "HEAD" }).catch(() => null);
-    if (head?.ok) return json({ url: publicUrl, cached: true });
+    if (head?.ok) { await consumeUsage(req, "cook", { recipeId }); return json({ url: publicUrl, cached: true }); }
 
     const bytes = await speak(text, voice, speed, key);
     if (!bytes) return json({ error: "Couldn't speak this step" }, 502);
@@ -83,6 +88,7 @@ Deno.serve(async (req) => {
       console.log("[cook-speech] upload", up.status, (await up.text().catch(() => "")).slice(0, 160));
       return json({ error: "Couldn't cache speech" }, 502);
     }
+    await consumeUsage(req, "cook", { recipeId });
     return json({ url: publicUrl, cached: false });
   } catch (e) {
     console.log("[cook-speech] error", e);

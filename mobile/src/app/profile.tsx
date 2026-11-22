@@ -2,14 +2,17 @@ import { DIETS } from '@/lib/services/genie-recipes';
 import type { RecipeLanguage } from '@/lib/types';
 import { useTheme } from '@/lib/theme-context';
 import React, { useState } from 'react';
-import { Keyboard, Modal, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Modal, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Share2, ChevronRight, LogOut, RotateCcw, Sparkles, UserPlus } from 'lucide-react-native';
+import { Bell, Crown, Share2, ChevronRight, LogOut, RotateCcw, Sparkles, UserPlus } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow } from '@/components/ui';
 import { toast, useApp } from '@/lib/store';
+import { leaveKitchen } from '@/lib/household';
+import { openPaywall } from '@/lib/plus';
+import { restorePurchases } from '@/lib/purchases';
 import { readShareExtensionLog } from '@/lib/share-inbox';
 import { haptic } from '@/lib/theme';
 
@@ -24,6 +27,7 @@ export default function Profile() {
   const renameMember = useApp((s) => s.renameMember);
   const clearKitchen = useApp((s) => s.clearKitchen);
   const signOut = useApp((s) => s.signOut);
+  const isPlus = useApp((s) => s.isPlus);
   const expiryAlerts = useApp((s) => s.expiryNudges);
   const setExpiryAlerts = useApp((s) => s.setExpiryNudges);
   const [voteAlerts, setVoteAlerts] = useState<boolean>(true);
@@ -136,6 +140,31 @@ export default function Profile() {
         <AppearancePicker />
 
         <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">
+          Honey, Dinner? Plus
+        </Txt>
+        <View className="overflow-hidden rounded-2xl bg-white">
+          <Row
+            testID="profile-plus"
+            icon={<Crown size={19} color={C.honeyDark} />}
+            label={isPlus ? 'Honey, Dinner? Plus · on' : 'Honey, Dinner? Plus'}
+            tint={C.honeyDark}
+            onPress={() => openPaywall('profile')}
+            first
+          />
+          <Row
+            testID="profile-restore"
+            icon={<RotateCcw size={19} color={C.ink} />}
+            label="Restore purchases"
+            onPress={() => {
+              void restorePurchases().then((res) => {
+                if (res.ok) { haptic.success(); toast('Plus is back on this phone.'); }
+                else toast(res.message);
+              });
+            }}
+          />
+        </View>
+
+        <Txt label weight="extrabold" className="mb-2 mt-7 text-[15px] uppercase tracking-widest text-ink-faint">
           App
         </Txt>
         <View className="overflow-hidden rounded-2xl bg-white">
@@ -153,12 +182,29 @@ export default function Profile() {
           <Row
             testID="profile-sign-out"
             icon={<LogOut size={19} color={C.berry} />}
-            label="Sign out"
+            label="Reset app"
             tint={C.berry}
             onPress={() => {
-              signOut();
-              router.dismissAll();
-              router.replace('/onboarding');
+              Alert.alert(
+                'Reset this kitchen?',
+                'Leaves any shared kitchen, clears recipes and lists on this phone, and starts the tour again. Your partner keeps the shared kitchen. Plus stays tied to this Apple ID.',
+                [
+                  { text: 'Keep cooking', style: 'cancel' },
+                  {
+                    text: 'Reset app',
+                    style: 'destructive',
+                    onPress: () => {
+                      void (async () => {
+                        await leaveKitchen();
+                        clearKitchen();
+                        signOut();
+                        router.dismissAll();
+                        router.replace('/onboarding');
+                      })();
+                    },
+                  },
+                ],
+              );
             }}
           />
         </View>

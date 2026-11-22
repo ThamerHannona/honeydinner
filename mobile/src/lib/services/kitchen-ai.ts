@@ -1,4 +1,5 @@
 import { useApp } from '@/lib/store';
+import { plusErrorFromResponse, plusHeaders, PlusRequiredError } from '@/lib/plus';
 import { guessEmoji } from '../kitchen';
 import type { DetectedItem, Ingredient, RecipeDraft, SourcePlatform } from '../types';
 
@@ -81,17 +82,6 @@ export type ImportInput =
   | { kind: 'image'; uri: string }
   | { kind: 'video'; uri: string };
 
-/** Simulated: links containing "fail", or links with no post path, can't be read. */
-const looksUnreadable = (url: string) => {
-  if (/fail|nope|private/i.test(url)) return true;
-  try {
-    const u = new URL(url);
-    return u.pathname.replace(/\/+$/, '').length < 2;
-  } catch {
-    return true;
-  }
-};
-
 export async function importRecipe(
   input: ImportInput,
   onStep: (step: ImportStep) => void,
@@ -100,7 +90,6 @@ export async function importRecipe(
     const url = extractUrl(input.url) ?? input.url;
     const platform = detectPlatform(url) ?? 'web';
     onStep('caption');
-    if (looksUnreadable(url)) throw new ImportFailedError("Couldn't find the recipe in that post.");
 
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -121,15 +110,17 @@ export async function importRecipe(
     try {
       const res = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/import-recipe`, {
         method: 'POST',
-        headers: {
+        headers: plusHeaders({
           'content-type': 'application/json',
           apikey: supabaseAnonKey,
           authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        }),
         body: JSON.stringify({ url, lang: useApp.getState().recipeLanguage ?? 'en' }),
       });
+      const data = (await res.json().catch(() => null)) as null | { recipe?: RecipeDraft; error?: string; code?: string; feature?: string };
+      const plusErr = plusErrorFromResponse(res.status, data, 'import');
+      if (plusErr) throw plusErr;
       if (!res.ok) throw new Error('Import failed');
-      const data = (await res.json().catch(() => null)) as null | { recipe?: RecipeDraft };
       if (!data?.recipe) throw new Error('Import failed');
       onStep('writing');
       return {
@@ -137,7 +128,8 @@ export async function importRecipe(
         // Ensure platform/url reflect what the user imported (backend may normalize internally).
         source: { ...data.recipe.source, platform, url },
       };
-    } catch {
+    } catch (e) {
+      if (e instanceof PlusRequiredError || e instanceof ImportFailedError) throw e;
       throw new ImportFailedError("Couldn't find the recipe in that post.");
     } finally {
       stopped = true;
@@ -145,10 +137,38 @@ export async function importRecipe(
     }
   }
 
-  // Screenshot / photo / screen recording
-  onStep('caption');
-  onStep('writing');
-  throw new ImportFailedError("Couldn't find the recipe in that post.");
+  // Screenshot / cookbook photo. Screen recordings are hidden in the UI.
+  if (input.kind !== 'image' || !input.uri) {
+    throw new ImportFailedError("Couldn't find the recipe in that post.");
+  }
+  onStep('onscreen');
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ImportFailedError("Couldn't find the recipe in that photo.");
+  }
+  const image = await readBase64({ uri: input.uri });
+  if (!image) throw new ImportFailedError("Couldn't read that photo.");
+  try {
+    const res = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/import-recipe`, {
+      method: 'POST',
+      headers: plusHeaders({
+        'content-type': 'application/json',
+        apikey: supabaseAnonKey,
+        authorization: `Bearer ${supabaseAnonKey}`,
+      }),
+      body: JSON.stringify({ image, lang: useApp.getState().recipeLanguage ?? 'en' }),
+    });
+    const data = (await res.json().catch(() => null)) as null | { recipe?: RecipeDraft; error?: string; feature?: string };
+    const plusErr = plusErrorFromResponse(res.status, data, 'import');
+    if (plusErr) throw plusErr;
+    if (!res.ok || !data?.recipe) throw new Error('Import failed');
+    onStep('writing');
+    return { ...data.recipe, source: { ...data.recipe.source, platform: 'photo', url: null } };
+  } catch (e) {
+    if (e instanceof PlusRequiredError || e instanceof ImportFailedError) throw e;
+    throw new ImportFailedError("Couldn't find the recipe in that photo.");
+  }
 }
 
 export const blankDraft = (platform: SourcePlatform = 'web', url: string | null = null): RecipeDraft => ({
@@ -266,15 +286,17 @@ async function scanWithVision(mode: 'receipt' | 'fridge', photo: ScanPhoto): Pro
   try {
     const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/scan-kitchen`, {
       method: 'POST',
-      headers: {
+      headers: plusHeaders({
         'content-type': 'application/json',
         apikey: anon,
         authorization: `Bearer ${anon}`,
-      },
+      }),
       body: JSON.stringify(sections ? { mode, images: sections } : { mode, image }),
       signal: ctrl.signal,
     });
-    const body = await res.json().catch(() => null) as { items?: unknown; error?: string } | null;
+    const body = await res.json().catch(() => null) as { items?: unknown; error?: string; feature?: string } | null;
+    const plusErr = plusErrorFromResponse(res.status, body, 'scan');
+    if (plusErr) throw plusErr;
     if (!res.ok) throw new Error(body?.error || 'Couldn\'t read that photo');
     const items = itemsFromResponse(body, mode === 'receipt' ? 'pantry' : 'fridge');
     if (!items.length) throw new Error('No items found');

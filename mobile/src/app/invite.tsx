@@ -129,7 +129,7 @@ export default function Invite() {
               accessibilityRole="button"
               onPress={() => {
                 void leaveKitchen();
-                toast('Left the shared kitchen. Your recipes stay on this phone.');
+                toast('Left the shared kitchen. Recipes and lists stay on this phone and are no longer synced.');
               }}
               className="mt-8 flex-row items-center self-center"
               style={{ gap: 6, minHeight: 44 }}

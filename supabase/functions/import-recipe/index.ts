@@ -15,6 +15,7 @@
 //          OPENAI_MODEL, OPENAI_TRANSCRIBE_MODEL, GEMINI_MODEL, MAX_VIDEO_BYTES (optional).
 
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+import { consumeUsage, gateUsage } from "../_shared/plus.ts";
 
 const DEFAULT_IMAGE =
   "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80&auto=format&fit=crop";
@@ -25,7 +26,7 @@ const ESTIMATED_NOTE =
 
 const corsHeaders: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-requested-with, x-hd-app-user-id",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 
@@ -490,6 +491,72 @@ async function withOpenAI(info: PostInfo, transcript: string | null, lang: strin
   return sanitize(parsed);
 }
 
+
+function dataUrlFromBody(image: unknown): string | null {
+  const raw = typeof image === "string" ? image.trim() : "";
+  if (!raw) return null;
+  if (/^data:image\/(jpeg|jpg|png|webp|heic|heif);base64,/i.test(raw)) return raw;
+  const compact = raw.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+=*$/.test(compact) || compact.length < 80) return null;
+  const mime = compact.startsWith("/9j/") ? "image/jpeg" : compact.startsWith("iVBOR") ? "image/png" : compact.startsWith("UklGR") ? "image/webp" : "image/jpeg";
+  return `data:${mime};base64,${compact}`;
+}
+
+async function persistDataUrlCover(dataUrl: string): Promise<string | null> {
+  const base = Deno.env.get("SUPABASE_URL"), service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!base || !service) return null;
+  try {
+    const m = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/i);
+    if (!m) return null;
+    const type = m[1];
+    const raw = m[2].replace(/\s+/g, "");
+    const bin = atob(raw);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    if (buf.byteLength < 100) return null;
+    const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", buf))].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
+    const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+    const path = `covers/${hash}.${ext}`;
+    const up = await fetch(`${base}/storage/v1/object/step-images/${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${service}`, "content-type": type, "x-upsert": "true", "cache-control": "31536000" },
+      body: buf,
+    });
+    if (!up.ok) { log("cover upload", up.status); return null; }
+    return `${base}/storage/v1/object/public/step-images/${path}`;
+  } catch (e) {
+    log("cover persist failed", String(e));
+    return null;
+  }
+}
+
+async function fromPhoto(dataUrl: string, lang: string): Promise<Extracted | null> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) return null;
+  const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: rules(lang) },
+        { role: "user", content: [
+          { type: "text", text: "This is a photo of a cookbook page, handwritten recipe, or a screenshot of a recipe. Read all visible text and write a clean recipe. If amounts or steps are incomplete, fill in a classic home-cook version of that dish and set estimated: true." },
+          { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
+        ] },
+      ],
+    }),
+  });
+  if (!res.ok) { log("openai photo http", res.status, (await res.text().catch(() => "")).slice(0, 200)); return null; }
+  const j = await res.json().catch(() => null) as any;
+  const parsed = parseJson(j?.choices?.[0]?.message?.content ?? "");
+  if (parsed?.ok === false) throw new UserFacingError("That photo doesn't look like a recipe.");
+  return sanitize(parsed);
+}
+
 // ───────────────────────── Handler ─────────────────────────
 
 // ---- Cache: a post we've already read comes back instantly (used when the
@@ -536,8 +603,29 @@ Deno.serve(async (req) => {
       return json({ error: "Server is not configured for recipe import." }, 500);
     }
     const body = await req.json().catch(() => null) as any;
-    const url = normalizeUrl(typeof body?.url === "string" ? body.url : "");
+    const blocked = await gateUsage(req, "import", { cors: corsHeaders });
+    if (blocked) return blocked;
+    const photo = dataUrlFromBody(body?.image);
     const LANG: string = ["en", "ar", "es", "original"].includes(body?.lang) ? body.lang : "en";
+    if (photo) {
+      const recipe = await fromPhoto(photo, LANG);
+      if (!recipe) throw new UserFacingError("Couldn't find the recipe in that photo.");
+      const cover = (await persistDataUrlCover(photo)) ?? DEFAULT_IMAGE;
+      const draft: RecipeDraft = {
+        title: recipe.title,
+        image: cover,
+        servings: recipe.servings ?? 2,
+        cookTime: recipe.cookTime ?? 30,
+        ingredients: recipe.ingredients,
+        steps: recipe.steps,
+        source: { platform: "photo", url: null, creator: null },
+        ...(recipe.estimated ? { note: ESTIMATED_NOTE } : {}),
+      };
+      log("done", "photo", LANG, recipe.title);
+      await consumeUsage(req, "import");
+      return json({ recipe: draft, method: "openai-photo" });
+    }
+    const url = normalizeUrl(typeof body?.url === "string" ? body.url : "");
     const cacheKey = LANG === "en" ? url : `${url}#lang=${LANG}`;
 
     const cached = body?.fresh ? null : await cacheGet(cacheKey);
@@ -551,6 +639,7 @@ Deno.serve(async (req) => {
           await cachePut([cacheKey], rec, cached.method).catch(() => {});
         }
       }
+      await consumeUsage(req, "import");
       return json({ recipe: rec, method: cached.method });
     }
 
@@ -590,6 +679,7 @@ Deno.serve(async (req) => {
       ...(recipe.estimated ? { note: ESTIMATED_NOTE } : {}),
     };
     await cachePut(LANG === "en" ? [url, info.url] : [cacheKey, `${info.url}#lang=${LANG}`], draft, method);
+    await consumeUsage(req, "import");
     return json({ recipe: draft, method });
   } catch (e) {
     const message = e instanceof UserFacingError ? e.message : "Import failed";

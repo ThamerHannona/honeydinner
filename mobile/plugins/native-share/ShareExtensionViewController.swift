@@ -608,9 +608,13 @@ class ShareExtensionViewController: UIViewController {
     var lang = "en"
     if let sURL = containerURL()?.appendingPathComponent("hd-settings.json"),
        let sData = try? Data(contentsOf: sURL),
-       let sObj = try? JSONSerialization.jsonObject(with: sData) as? [String: Any],
-       let l = sObj["lang"] as? String, ["en", "ar", "es", "original"].contains(l) {
-      lang = l
+       let sObj = try? JSONSerialization.jsonObject(with: sData) as? [String: Any] {
+      if let l = sObj["lang"] as? String, ["en", "ar", "es", "original"].contains(l) {
+        lang = l
+      }
+      if let uid = sObj["appUserId"] as? String, !uid.isEmpty {
+        req.setValue(uid, forHTTPHeaderField: "x-hd-app-user-id")
+      }
     }
     req.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url, "lang": lang], options: [])
 
@@ -643,9 +647,12 @@ class ShareExtensionViewController: UIViewController {
           return
         }
       }
-      if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-         let msg = obj["error"] as? String {
-        self.logExt("import 422 \(msg)")
+      if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let msg = obj["error"] as? String { self.logExt("import \(code) \(msg)") }
+        if code == 402 {
+          DispatchQueue.main.async { self.finishFailed(url: url, message: "This week's free imports are used up. Open Honey, Dinner? to unlock Plus.") }
+          return
+        }
       }
       self.queueLink(url)
       DispatchQueue.main.async { self.finishFailed(url: url, message: "Couldn't read that one.") }

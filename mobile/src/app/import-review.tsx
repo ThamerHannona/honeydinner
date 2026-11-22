@@ -16,6 +16,7 @@ import { Button, PressableScale, Txt, AView, GenieBubble } from '@/components/ui
 import { genieSaved } from '@/lib/genie';
 import { blankDraft, PLATFORM_LABEL } from '@/lib/services/kitchen-ai';
 import { toast, useApp } from '@/lib/store';
+import { maybeShowGentlePaywall } from '@/lib/plus';
 import { haptic, fonts } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
 import type { Ingredient, RecipeDraft } from '@/lib/types';
@@ -56,9 +57,10 @@ export default function ImportReview() {
     const id = saveRecipe(d, !isManual);
     if (addMissing && missing.length) addToGroceries(missing, id);
     toast(genieSaved(d.title.trim()));
-    if (!useApp.getState().onboarded) { goBack(); return; }
+    if (!useApp.getState().onboarded) { maybeShowGentlePaywall(!isManual); goBack(); return; }
     router.dismissAll();
     router.navigate('/recipes');
+    maybeShowGentlePaywall(!isManual);
   };
 
   return (

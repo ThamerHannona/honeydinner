@@ -105,7 +105,7 @@ export async function drainInbox(): Promise<Pending> {
 }
 
 /** Settings the native share panel reads (it can't see the app's storage). */
-export function writeShareSettings(settings: { lang: string }) {
+export function writeShareSettings(settings: { lang: string; appUserId?: string }) {
   try {
     const dir = appGroupDir();
     if (!dir) return;

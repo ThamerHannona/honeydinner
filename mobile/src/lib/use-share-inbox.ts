@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import { router } from 'expo-router';
 import { drainInbox, writeShareSettings } from './share-inbox';
 import { toast, useApp } from './store';
+import { maybeShowGentlePaywall } from './plus';
 import { PLATFORM_LABEL } from './services/kitchen-ai';
 
 export const whenHydrated = (fn: () => void) => {
@@ -24,6 +25,7 @@ export async function ingestInbox(): Promise<{ lastId: string | null; hasLink: b
   const save = useApp.getState().saveRecipe;
   let lastId: string | null = null;
   for (const { sharedAt: _sharedAt, ...draft } of recipes) lastId = save(draft, true);
+  if (recipes.length) maybeShowGentlePaywall(true);
   if (recipes.length === 1) {
     const r = recipes[0];
     toast(`Saved from ${PLATFORM_LABEL[r.source.platform] ?? 'the web'}: ${r.title}`);
@@ -40,9 +42,13 @@ export async function ingestInbox(): Promise<{ lastId: string | null; hasLink: b
 export function useShareInbox() {
   // keep the share panel's copy of the recipe-language setting current
   useEffect(() => {
-    whenHydrated(() => writeShareSettings({ lang: useApp.getState().recipeLanguage }));
+    const write = () => {
+      const s = useApp.getState();
+      writeShareSettings({ lang: s.recipeLanguage, appUserId: s.appUserId });
+    };
+    whenHydrated(write);
     return useApp.subscribe((st, prev) => {
-      if (st.recipeLanguage !== prev.recipeLanguage) writeShareSettings({ lang: st.recipeLanguage });
+      if (st.recipeLanguage !== prev.recipeLanguage || st.appUserId !== prev.appUserId) write();
     });
   }, []);
   useEffect(() => {

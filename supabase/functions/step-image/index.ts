@@ -4,9 +4,11 @@
 // Secrets: OPENAI_API_KEY (required), OPENAI_IMAGE_MODEL (optional).
 // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 
+import { consumeUsage, gateUsage } from "../_shared/plus.ts";
+
 const cors: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-hd-app-user-id",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 const json = (d: unknown, status = 200) =>
@@ -64,12 +66,15 @@ Deno.serve(async (req) => {
     const title = String(body?.title ?? "").slice(0, 120).trim();
     const step = String(body?.step ?? "").slice(0, 500).trim();
     if (!title || !step) return json({ error: "Missing title or step" }, 400);
+    const recipeId = typeof body?.recipeId === "string" ? body.recipeId : null;
+    const blocked = await gateUsage(req, "cook", { cors, recipeId });
+    if (blocked) return blocked;
     const ingredients = Array.isArray(body?.ingredients) ? body.ingredients.map(String).slice(0, 15).join(", ") : "";
 
     const path = `${await sha(`v2|${title}|${step}`)}.jpg`;
     const publicUrl = `${base}/storage/v1/object/public/${BUCKET}/${path}`;
     const head = await fetch(publicUrl, { method: "HEAD" }).catch(() => null);
-    if (head?.ok) return json({ url: publicUrl, cached: true });
+    if (head?.ok) { await consumeUsage(req, "cook", { recipeId }); return json({ url: publicUrl, cached: true }); }
 
     const prompt =
       `Warm, natural-light cookbook photograph of a home cook doing this step of "${title}": ${step}. ` +
@@ -88,6 +93,7 @@ Deno.serve(async (req) => {
       console.log("[step-image] upload", up.status, (await up.text().catch(() => "")).slice(0, 160));
       return json({ error: "Couldn't save the image" }, 502);
     }
+    await consumeUsage(req, "cook", { recipeId });
     return json({ url: publicUrl, cached: false });
   } catch (e) {
     console.log("[step-image] error", String(e));

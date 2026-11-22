@@ -11,6 +11,7 @@ import { PlatformBadge } from '@/components/brand';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { Button, PressableScale, Txt, Highlight, Skeleton } from '@/components/ui';
 import { detectPlatform, IMPORT_STEPS, importRecipe, PLATFORM_LABEL, type ImportInput, type ImportStep } from '@/lib/services/kitchen-ai';
+import { PlusRequiredError } from '@/lib/plus';
 import { useApp } from '@/lib/store';
 import { haptic } from '@/lib/theme';
 
@@ -32,7 +33,14 @@ export default function ImportLoading() {
       haptic.success(); setImportDraft(draft);
       timer.current = setTimeout(() => { if (!cancelled.current) router.replace('/import-review'); }, 350);
     },
-    onError: () => { if (!cancelled.current) router.replace({ pathname: '/import-failed', params: { url: input.kind === 'link' ? input.url : '', platform } }); },
+    onError: (err) => {
+      if (cancelled.current) return;
+      if (err instanceof PlusRequiredError) {
+        router.replace({ pathname: '/plus', params: { reason: 'import' } });
+        return;
+      }
+      router.replace({ pathname: '/import-failed', params: { url: input.kind === 'link' ? input.url : '', platform } });
+    },
   });
   useEffect(() => {
     cancelled.current = false;

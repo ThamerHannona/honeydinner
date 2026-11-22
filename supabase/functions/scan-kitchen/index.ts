@@ -4,9 +4,11 @@
 //    →  { items: [{ name, quantity, location, expiresInDays }] }
 // Secrets: OPENAI_API_KEY. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided.
 
+import { consumeUsage, gateUsage } from "../_shared/plus.ts";
+
 const cors: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-hd-app-user-id",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 const json = (d: unknown, status = 200) =>
@@ -106,6 +108,9 @@ Deno.serve(async (req) => {
     const urls = rawImages.map((i) => dataUrl(String(i ?? ""))).filter((u): u is string => !!u);
     if (!urls.length) return json({ error: "Missing image" }, 400);
 
+    const blocked = await gateUsage(req, "scan", { cors });
+    if (blocked) return blocked;
+
     // Receipts are dense small print: lead with the strongest vision models.
     const models = mode === "receipt" ? ["gpt-4.1", "gpt-4o", "gpt-4o-mini"] : ["gpt-4o", "gpt-4o-mini"];
     const parsed = await readImage(key, PROMPT[mode], urls, models);
@@ -114,6 +119,7 @@ Deno.serve(async (req) => {
     if (!parsed) return json({ error: "Couldn't read that photo" }, 502);
     const items = parseItems(parsed, mode === "receipt" ? "fridge" : "fridge");
     if (!items.length) return json({ error: "No items found" }, 422);
+    await consumeUsage(req, "scan");
     return json({ items });
   } catch (e) {
     console.log("[scan-kitchen] error", e);

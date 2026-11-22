@@ -6,10 +6,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, ZoomIn, useReducedMotion } from 'react-native-reanimated';
-import { ClipboardPaste, Film, ImagePlus, Info, Link2 } from 'lucide-react-native';
+import { ClipboardPaste, ImagePlus, Info, Link2 } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { PLATFORM_COLOR, PlatformBadge, PlatformGlyph } from '@/components/brand';
-import { Button, PressableScale, Txt, AView, HardShadow, GenieBubble } from '@/components/ui';
+import { Button, PressableScale, Txt, AView, HardShadow } from '@/components/ui';
 import { detectPlatform, extractUrl, PLATFORM_LABEL } from '@/lib/services/kitchen-ai';
 import { haptic, fonts } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
@@ -169,7 +169,7 @@ export default function ImportSheet() {
           <AView entering={reduceMotion ? undefined : FadeInDown} className="mt-3 flex-row rounded-2xl p-3.5" style={{ backgroundColor: C.honeySoft, gap: 10 }} testID="snapchat-note">
             <Info size={18} color={C.honeyDark} />
             <Txt weight="bold" className="flex-1 text-[14px] leading-5" style={{ color: C.ink }}>
-              Public Spotlight link, or save a screen recording of the snap.
+              Public Spotlight link works best.
             </Txt>
           </AView>
         ) : null}
@@ -178,7 +178,6 @@ export default function ImportSheet() {
           {[
             { key: 'link', label: 'Paste any link', sub: 'Blogs, YouTube, recipe sites', icon: Link2, onPress: () => { setChosen('any'); tryPaste('any'); } },
             { key: 'photo', label: 'Screenshot / Photo', sub: 'A cookbook page or a saved screenshot', icon: ImagePlus, onPress: () => pick('image') },
-            { key: 'recording', label: 'Screen recording', sub: 'Perfect for Snaps and Stories', icon: Film, onPress: () => pick('video') },
           ].map((o, i) => {
             const Icon = o.icon;
             return (
@@ -199,10 +198,6 @@ export default function ImportSheet() {
               </PressableScale>
             );
           })}
-        </View>
-
-        <View className="mt-6">
-          <GenieBubble text="Preview imports use sample recipes for now. Review and edit before saving." />
         </View>
 
         <View className="mt-6">

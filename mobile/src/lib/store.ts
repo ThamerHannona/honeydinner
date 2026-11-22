@@ -21,8 +21,20 @@ import type {
 
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
+const newAppUserId = () => {
+  const g = globalThis as { crypto?: { randomUUID?: () => string } };
+  if (g.crypto?.randomUUID) return `hd_${g.crypto.randomUUID()}`;
+  return `hd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+};
+
 interface AppState {
   hydrated: boolean;
+  /** Stable id used as the RevenueCat app user id and sent to edge functions. */
+  appUserId: string;
+  isPlus: boolean;
+  hasImported: boolean;
+  gentlePaywallShown: boolean;
+  freeCookRecipeId: string | null;
   onboarded: boolean;
   signedIn: boolean;
   members: Member[];
@@ -49,6 +61,10 @@ interface AppState {
   completeOnboarding: (name?: string) => void;
   signIn: () => void;
   signOut: () => void;
+  setPlus: (on: boolean) => void;
+  markImported: () => void;
+  markGentlePaywallShown: () => void;
+  setFreeCookRecipeId: (id: string | null) => void;
   invitePartner: (name: string) => void;
   renameMember: (id: string, name: string) => void;
   clearKitchen: () => void;
@@ -129,6 +145,11 @@ export const useApp = create<AppState>()(
   persist(
     (set, get) => ({
       hydrated: false,
+      appUserId: newAppUserId(),
+      isPlus: false,
+      hasImported: false,
+      gentlePaywallShown: false,
+      freeCookRecipeId: null,
       onboarded: false,
       signedIn: false,
       lastClipboard: null,
@@ -157,6 +178,10 @@ export const useApp = create<AppState>()(
         }),
       signIn: () => set({ signedIn: true }),
       signOut: () => set({ signedIn: false, onboarded: false }),
+      setPlus: (on) => set({ isPlus: on }),
+      markImported: () => set({ hasImported: true }),
+      markGentlePaywallShown: () => set({ gentlePaywallShown: true }),
+      setFreeCookRecipeId: (id) => set({ freeCookRecipeId: id }),
       invitePartner: (name) =>
         set((s) => {
           const n = name.trim();
@@ -484,6 +509,11 @@ export const useApp = create<AppState>()(
       },
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
+        appUserId: s.appUserId,
+        isPlus: s.isPlus,
+        hasImported: s.hasImported,
+        gentlePaywallShown: s.gentlePaywallShown,
+        freeCookRecipeId: s.freeCookRecipeId,
         onboarded: s.onboarded,
         signedIn: s.signedIn,
         members: s.members,
@@ -502,7 +532,11 @@ export const useApp = create<AppState>()(
         checklistDismissed: s.checklistDismissed,
       }),
       onRehydrateStorage: () => () => {
-        useApp.setState((s) => ({ hydrated: true, recipes: dedupeRecipes(s.recipes) }));
+        useApp.setState((s) => ({
+          hydrated: true,
+          recipes: dedupeRecipes(s.recipes),
+          appUserId: s.appUserId || newAppUserId(),
+        }));
       },
     },
   ),

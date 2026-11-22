@@ -11,6 +11,8 @@ import { useFonts } from 'expo-font';
 import { Fraunces_600SemiBold, Fraunces_600SemiBold_Italic } from '@expo-google-fonts/fraunces';
 import { BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold } from '@expo-google-fonts/barlow-condensed';
 import { Nunito_500Medium, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold } from '@expo-google-fonts/nunito';
+import { CaveatBrush_400Regular } from '@expo-google-fonts/caveat-brush';
+import { initPurchases } from '@/lib/purchases';
 import { ToastHost } from '@/components/app';
 import { LaunchIntro } from '@/components/launch-intro';
 import { useApp } from '@/lib/store';
@@ -49,7 +51,6 @@ function RootLayoutNav() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.cream }, animation, gestureEnabled: true, fullScreenGestureEnabled: Platform.OS === 'ios', animationMatchesGesture: true }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="onboarding" options={{ animation: reducedMotion ? 'none' : 'fade' }} />
-        <Stack.Screen name="sign-in" />
         <Stack.Screen name="invite" />
         <Stack.Screen name="how-to-share" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="add-sheet" options={{ ...sheet, sheetAllowedDetents: [0.42] }} />
@@ -67,6 +68,7 @@ function RootLayoutNav() {
         <Stack.Screen name="ask-honey" options={{ presentation: 'modal' }} />
         <Stack.Screen name="partner-vote" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="plus" options={{ presentation: 'modal' }} />
       </Stack>
     </NavigationThemeProvider>
   );
@@ -93,8 +95,9 @@ function ThemedRoot() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({ Fraunces_600SemiBold, Fraunces_600SemiBold_Italic, BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold, Nunito_500Medium, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold });
+  const [fontsLoaded, fontError] = useFonts({ Fraunces_600SemiBold, Fraunces_600SemiBold_Italic, BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold, Nunito_500Medium, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold, CaveatBrush_400Regular });
   const hydrated = useApp((s) => s.hydrated);
+  useEffect(() => { if (hydrated) void initPurchases(); }, [hydrated]);
   if (!(fontsLoaded || !!fontError) || !hydrated) return null;
   return (
     <QueryClientProvider client={queryClient}>

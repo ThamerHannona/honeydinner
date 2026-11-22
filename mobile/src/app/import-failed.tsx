@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
-import { ChevronRight, Film, ImagePlus, Keyboard } from 'lucide-react-native';
+import { ChevronRight, ImagePlus, Keyboard } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { Illustration } from '@/components/brand';
 import { PressableScale, Txt, HardShadow } from '@/components/ui';
@@ -20,11 +20,11 @@ export default function ImportFailed() {
   const { url, platform } = useLocalSearchParams<{ url?: string; platform?: string }>();
   const setImportDraft = useApp((s) => s.setImportDraft);
 
-  const pick = async (kind: 'image' | 'video') => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kind === 'image' ? ['images'] : ['videos'], quality: 0.8 });
+  const pick = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     const uri = res.assets?.[0]?.uri;
     if (res.canceled || !uri) return;
-    router.replace({ pathname: '/import-loading', params: { kind, uri } });
+    router.replace({ pathname: '/import-loading', params: { kind: 'image', uri } });
   };
 
   const typeIt = () => {
@@ -33,8 +33,7 @@ export default function ImportFailed() {
   };
 
   const options = [
-    { key: 'screenshot', label: 'Upload a screenshot', sub: 'Of the caption or the recipe card', icon: ImagePlus, onPress: () => pick('image') },
-    { key: 'recording', label: 'Upload a screen recording', sub: "I'll watch it and take notes", icon: Film, onPress: () => pick('video') },
+    { key: 'screenshot', label: 'Upload a screenshot', sub: 'Of the caption or the recipe card', icon: ImagePlus, onPress: () => pick() },
     { key: 'type', label: 'Type it in', sub: 'Quick form, I kept the link for you', icon: Keyboard, onPress: typeIt },
   ];
 
@@ -58,8 +57,8 @@ export default function ImportFailed() {
               <Animated.View key={o.key} entering={reduceMotion ? undefined : FadeInDown.delay(i * 60)}>
                 <PressableScale testID={`failed-${o.key}`} accessibilityRole="button" accessibilityLabel={o.label} onPress={o.onPress}>
                   <HardShadow radius={16}><View className="min-h-[68px] flex-row items-center rounded-2xl p-3.5" style={[{ backgroundColor: C.paper }, { gap: 12 }]}>
-                    <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: i === 2 ? C.leaf : C.creamDeep }}>
-                      <Icon size={21} color={i === 2 ? C.paper : C.ink} />
+                    <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: o.key === 'type' ? C.leaf : C.creamDeep }}>
+                      <Icon size={21} color={o.key === 'type' ? C.paper : C.ink} />
                     </View>
                     <View className="flex-1">
                       <Txt weight="extrabold" className="text-[16px]" style={{ color: C.ink }}>
