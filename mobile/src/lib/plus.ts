@@ -4,6 +4,7 @@
 export const PLUS_MONTHLY_ID = 'com.shakeandbakelabs.honeydinner.plus.monthly';
 export const PLUS_YEARLY_ID = 'com.shakeandbakelabs.honeydinner.plus.yearly';
 export const PLUS_ENTITLEMENT = 'plus';
+export const PLUS_OFFERING_ID = 'honeydinner';
 export const FREE_IMPORTS_PER_WEEK = 3;
 export const FREE_SCANS_PER_WEEK = 2;
 export const PRIVACY_URL = 'https://shakeandbakelabs.com/honeydinner/privacy';

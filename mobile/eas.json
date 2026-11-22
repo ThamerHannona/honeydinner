@@ -43,7 +43,8 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://rzacuyrcbujcnkpoktyg.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6YWN1eXJjYnVqY25rcG9rdHlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1ODY1NzIsImV4cCI6MjEwOTE2MjU3Mn0.XC-8R2qxzYhvtu0wEv7QbMhplVrbM7wKaezoWBVRS4Q"
-      }
+      },
+      "environment": "production"
     }
   },
   "submit": {

@@ -1,7 +1,7 @@
 // RevenueCat wrapper. If the iOS API key is missing or the native module
 // isn't available, the app stays on the free tier and never crashes.
 import { Platform } from 'react-native';
-import { PLUS_ENTITLEMENT, PLUS_MONTHLY_ID, PLUS_YEARLY_ID } from '@/lib/plus';
+import { PLUS_ENTITLEMENT, PLUS_MONTHLY_ID, PLUS_OFFERING_ID, PLUS_YEARLY_ID } from '@/lib/plus';
 import { useApp } from '@/lib/store';
 
 export type PlusPlan = {
@@ -84,10 +84,10 @@ export async function loadPlusPlans(): Promise<Offers> {
   if (!RC) return fallback;
   try {
     const offerings = await RC.default.getOfferings();
-    const pkgs = [
-      ...(offerings.current?.availablePackages ?? []),
-      ...Object.values(offerings.all).flatMap((o) => o.availablePackages),
-    ];
+    // Always fetch the Honey, Dinner? offering by identifier. The project's
+    // "current" offering is shared with other apps (PEP YEAH) and must stay
+    // unchanged, so this app must not read offerings.current.
+    const pkgs = offerings.all[PLUS_OFFERING_ID]?.availablePackages ?? [];
     const seen = new Set<string>();
     let monthly = fallback.monthly;
     let yearly = fallback.yearly;
