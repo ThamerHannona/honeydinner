@@ -11,8 +11,10 @@ import { router } from 'expo-router';
 import { daysLeft, namesMatch } from '@/lib/kitchen';
 import { useApp } from '@/lib/store';
 import type { PantryItem, Recipe } from '@/lib/types';
+import { whenHydrated } from '@/lib/use-share-inbox';
 
 const TAG = 'hd-expiry';
+const handled = new Set<string>();
 const HOUR = 16;
 const MINUTE = 30;
 
@@ -87,7 +89,11 @@ export async function planExpiryNudges(): Promise<void> {
       ? `FridgeGenie: “${recipe.title}” uses it up. Tap to see dinner ideas.`
       : 'FridgeGenie has dinner ideas that use it up. Tap to see.';
     await Notifications.scheduleNotificationAsync({
-      content: { title, body, data: { tag: TAG, url: recipe ? `/recipe/${recipe.id}` : '/genie-chef' } },
+      content: {
+        title,
+        body,
+        data: { tag: TAG, url: `/genie-chef?use=${encodeURIComponent(plan.items.map((p) => p.name).slice(0, 6).join('|'))}${recipe ? `&recipe=${recipe.id}` : ''}` },
+      },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: plan.when },
     }).catch(() => {});
   }
@@ -105,10 +111,19 @@ export function useExpiryNudges() {
       if (s.pantry !== prev.pantry || s.expiryNudges !== prev.expiryNudges || s.onboarded !== prev.onboarded) schedule();
     });
     schedule();
-    const tap = Notifications.addNotificationResponseReceivedListener((res) => {
-      const url = res.notification.request.content.data?.url;
-      if (typeof url === 'string' && res.notification.request.content.data?.tag === TAG) router.push(url as never);
-    });
+    const open = (res: Notifications.NotificationResponse | null) => {
+      if (!res) return;
+      const id = res.notification.request.identifier;
+      const data = res.notification.request.content.data as { url?: unknown; tag?: unknown } | undefined;
+      if (handled.has(id) || data?.tag !== TAG || typeof data.url !== 'string') return;
+      handled.add(id);
+      const url = data.url;
+      // The app may have been closed: wait until saved data is loaded and the screens are mounted.
+      whenHydrated(() => { setTimeout(() => router.push(url as never), 700); });
+    };
+    // Tapped while the app was closed: the tap arrives before this listener exists.
+    void Notifications.getLastNotificationResponseAsync().then(open).catch(() => {});
+    const tap = Notifications.addNotificationResponseReceivedListener(open);
     return () => {
       unsub();
       tap.remove();

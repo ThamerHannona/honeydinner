@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useMutation } from '@tanstack/react-query';
@@ -13,7 +13,8 @@ import { haptic, signature } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
 import { DIETS, askGenieForRecipes, dishPhoto, ideaToDraft, type GenieIdea } from '@/lib/services/genie-recipes';
 import type { Diet } from '@/lib/types';
-import { pantryHas } from '@/lib/kitchen';
+import { pantryHas, matchRecipe } from '@/lib/kitchen';
+import { RecipeImage } from '@/components/recipe-image';
 
 const MOODS = ['Quick', 'Comfort food', 'Light', 'Something new'] as const;
 const THINKING = [
@@ -37,6 +38,10 @@ export default function GenieChef() {
   const [ideas, setIdeas] = useState<GenieIdea[]>([]);
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [thinking, setThinking] = useState<number>(0);
+  // Opened from an expiry nudge: "use these up"
+  const params = useLocalSearchParams<{ use?: string; recipe?: string }>();
+  const useUp = useMemo(() => (params.use ? String(params.use).split('|').map((x) => x.trim()).filter(Boolean) : []), [params.use]);
+  const nudgeRecipe = useMemo(() => (params.recipe ? recipes.find((r) => r.id === String(params.recipe)) : undefined), [params.recipe, recipes]);
 
   const counts = useMemo(() => ({
     fridge: pantry.filter((p) => p.location === 'fridge').length,
@@ -51,7 +56,7 @@ export default function GenieChef() {
         pantry,
         servings: Math.max(2, members.length),
         avoid: [...recipes.map((r) => r.title), ...ideas.map((i) => i.title)],
-        mood: mood ?? undefined,
+        mood: [useUp.length ? `MUST use up these before they spoil: ${useUp.join(', ')}` : '', mood ?? ''].filter(Boolean).join('. ') || undefined,
         lang: useApp.getState().recipeLanguage,
       }),
     onSuccess: (list) => {
@@ -62,6 +67,11 @@ export default function GenieChef() {
     },
     onError: (e: Error) => toast(e.message),
   });
+
+  useEffect(() => {
+    if (useUp.length && !ideas.length && !ask.isPending) ask.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useUp.join('|')]);
 
   useEffect(() => {
     if (!ask.isPending) return;
@@ -114,6 +124,32 @@ export default function GenieChef() {
             </Txt>
           </View>
         </View>
+
+        {useUp.length ? (
+          <View testID="genie-use-up" className="mx-5 mt-6 rounded-[22px] p-4" style={{ backgroundColor: C.paper, borderWidth: 1.5, borderColor: C.ink }}>
+            <Txt label weight="extrabold" className="text-[12px]" style={{ color: C.leafDark, letterSpacing: 1.2 }}>USE THESE UP SOON</Txt>
+            <View className="mt-2 flex-row flex-wrap" style={{ gap: 6 }}>
+              {useUp.map((n) => (
+                <View key={n} className="rounded-full px-3 py-1.5" style={{ backgroundColor: C.honey }}>
+                  <Txt weight="extrabold" className="text-[13px]" style={{ color: C.onHoney }}>{n}</Txt>
+                </View>
+              ))}
+            </View>
+            {nudgeRecipe ? (
+              <PressableScale testID="genie-use-up-recipe" accessibilityRole="button" accessibilityLabel={`Open ${nudgeRecipe.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: nudgeRecipe.id } })}>
+                <View className="mt-3 flex-row items-center rounded-2xl bg-white p-2.5" style={{ gap: 12 }}>
+                  <RecipeImage source={{ uri: nudgeRecipe.image }} style={{ width: 56, height: 56, borderRadius: 14 }} contentFit="cover" />
+                  <View className="flex-1">
+                    <Txt weight="extrabold" className="text-[15px]" numberOfLines={2}>{nudgeRecipe.title}</Txt>
+                    <Txt weight="semibold" className="text-[12px]" style={{ color: C.inkSoft }}>From your recipes · {matchRecipe(nudgeRecipe, pantry).have}/{matchRecipe(nudgeRecipe, pantry).total} in your kitchen</Txt>
+                  </View>
+                  <Txt weight="extrabold" className="text-[13px]" style={{ color: C.leafDark }}>Open ›</Txt>
+                </View>
+              </PressableScale>
+            ) : null}
+            <Txt weight="semibold" className="mt-3 text-[13px]" style={{ color: C.inkSoft }}>{ask.isPending ? 'Cooking up ideas that use them…' : 'New ideas that use them are below.'}</Txt>
+          </View>
+        ) : null}
 
         {/* eating style */}
         <View className="mt-7 px-5">
