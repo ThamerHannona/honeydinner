@@ -56,7 +56,8 @@ export default function RecipesScreen() {
     return catalogItems.filter((c) => c.category === category && hasPhoto(c)).map(catalogToRecipe);
   }, [mode, category, catalogItems, diets]);
   const ownMatches = useMemo(() => recipes.map((recipe) => ({ recipe, match: matchRecipe(recipe, pantry) })), [recipes, pantry, revision]);
-  const matches = useMemo(() => (mode === 'discover' ? discoverList.map((recipe) => ({ recipe, match: matchRecipe(recipe, pantry) })) : ownMatches), [mode, discoverList, ownMatches, pantry]);
+  // Discover is sorted for YOUR kitchen: what you can make (and have the protein for) first; it re-sorts as you add food.
+  const matches = useMemo(() => (mode === 'discover' ? discoverList.map((recipe) => ({ recipe, match: matchRecipe(recipe, pantry) })).sort((a, b) => b.match.score - a.match.score) : ownMatches), [mode, discoverList, ownMatches, pantry]);
   const readyCount = ownMatches.filter(({ match }) => match.missing.length === 0).length;
   const visibleAll = matches.filter(({ recipe, match }) => {
     if (mode === 'mine' && source && recipe.source.platform !== source) return false;

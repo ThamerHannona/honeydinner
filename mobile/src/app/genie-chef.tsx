@@ -14,7 +14,7 @@ import { haptic, signature } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
 import { DIETS, askGenieForRecipes, dishPhoto, ideaToDraft, type GenieIdea } from '@/lib/services/genie-recipes';
 import type { Diet } from '@/lib/types';
-import { pantryHas, matchRecipe } from '@/lib/kitchen';
+import { kitchenInsight, pantryHas, matchRecipe } from '@/lib/kitchen';
 import { RecipeImage } from '@/components/recipe-image';
 import { catalogForDiets, useCatalog } from '@/lib/catalog';
 
@@ -43,8 +43,20 @@ export default function GenieChef() {
   const catalogItems = useCatalog((s) => s.items);
   const fromCookbook = useMemo(() => {
     const list = catalogForDiets(catalogItems, diets).map((r) => ({ r, m: matchRecipe(r, pantry) }));
-    return list.filter((x) => x.m.have > 0).sort((a, b) => b.m.ratio - a.m.ratio || a.m.missing.length - b.m.missing.length).slice(0, 4);
+    return list.filter((x) => x.m.have > 0).sort((a, b) => b.m.score - a.m.score).slice(0, 5);
   }, [catalogItems, diets, pantry]);
+  // FridgeGenie's live read of your kitchen (out of protein? one buy away from more dinners?)
+  const insight = useMemo(() => {
+    const own = new Set(recipes.map((r) => r.title.toLowerCase()));
+    return kitchenInsight([...recipes, ...catalogForDiets(catalogItems, diets).filter((r) => !own.has(r.title.toLowerCase()))], pantry, diets);
+  }, [recipes, catalogItems, diets, pantry]);
+  const addGrocery = useApp((s) => s.addGrocery);
+  const groceries = useApp((s) => s.groceries);
+  const onList = (name: string) => groceries.some((g) => !g.checked && g.name.toLowerCase() === name.toLowerCase());
+  // Ideas remember the kitchen they were made for; if you add/remove food after, offer fresh ones.
+  const pantryKey = useMemo(() => pantry.map((p) => p.name.toLowerCase()).sort().join('|'), [pantry]);
+  const [ideasFor, setIdeasFor] = useState('');
+  const ideasStale = ideas.length > 0 && !!ideasFor && ideasFor !== pantryKey;
   // Opened from an expiry nudge: "use these up"
   const params = useLocalSearchParams<{ use?: string; recipe?: string }>();
   const useUp = useMemo(() => (params.use ? String(params.use).split('|').map((x) => x.trim()).filter(Boolean) : []), [params.use]);
@@ -69,6 +81,7 @@ export default function GenieChef() {
     onSuccess: (list) => {
       haptic.success();
       setIdeas(list);
+      setIdeasFor(pantryKey);
       useApp.getState().setGenieUsed();
       setSaved({});
     },
@@ -161,9 +174,37 @@ export default function GenieChef() {
           </View>
         ) : null}
 
+        {insight ? (
+          <Animated.View key={insight.text} entering={FadeIn} testID="genie-insight" className="mx-5 mt-6 rounded-3xl p-4" style={{ backgroundColor: C.forest }}>
+            <View className="flex-row items-start" style={{ gap: 10 }}>
+              <Sparkles size={18} color={C.honey} style={{ marginTop: 2 }} />
+              <Txt weight="semibold" className="flex-1 text-[15px] leading-[21px]" style={{ color: C.onGreen }}>{insight.text}</Txt>
+            </View>
+            {insight.buy ? (
+              <PressableScale
+                testID="genie-insight-add"
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${insight.buy} to the list`}
+                onPress={() => {
+                  if (onList(insight.buy!)) return;
+                  haptic.success();
+                  addGrocery(insight.buy!);
+                  toast(`Added ${insight.buy} to the list`);
+                }}
+                className="mt-3 self-start"
+              >
+                <View className="h-10 flex-row items-center rounded-full px-4" style={{ backgroundColor: C.honey, gap: 6 }}>
+                  {onList(insight.buy) ? <Check size={16} color={C.ink} /> : <Plus size={16} color={C.ink} />}
+                  <Txt weight="extrabold" className="text-[14px]">{onList(insight.buy) ? 'On your list' : `Add ${insight.buy} to the list`}</Txt>
+                </View>
+              </PressableScale>
+            ) : null}
+          </Animated.View>
+        ) : null}
+
         {fromCookbook.length ? (
           <View testID="genie-cookbook" className="mt-6 px-5">
-            <Txt label weight="extrabold" className="mb-3 text-[13px] uppercase tracking-widest" style={{ color: C.inkSoft }}>From the cookbook · you have most of it</Txt>
+            <Txt label weight="extrabold" className="mb-3 text-[13px] uppercase tracking-widest" style={{ color: C.inkSoft }}>From the cookbook · best for your kitchen</Txt>
             <View style={{ gap: 10 }}>
               {fromCookbook.map(({ r, m }) => (
                 <PressableScale key={r.id} testID={`genie-cookbook-${r.id}`} accessibilityRole="button" accessibilityLabel={`Open ${r.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: r.id } })}>
@@ -172,6 +213,11 @@ export default function GenieChef() {
                     <View className="flex-1">
                       <Txt weight="extrabold" className="text-[15px]" numberOfLines={2}>{r.title}</Txt>
                       <Txt weight="semibold" className="text-[12px]" style={{ color: C.inkSoft }}>{r.cookTime} min · {m.have}/{m.total} in your kitchen</Txt>
+                      {m.missing.length ? (
+                        <Txt weight="bold" className="text-[12px]" numberOfLines={1} style={{ color: m.proteinMissing ? C.berry : C.ink }}>Need: {m.missing.slice(0, 3).map((x) => x.name).join(', ')}{m.missing.length > 3 ? '…' : ''}</Txt>
+                      ) : (
+                        <Txt weight="extrabold" className="text-[12px]" style={{ color: C.leafDark }}>You have everything ✓</Txt>
+                      )}
                     </View>
                     <Txt weight="extrabold" className="text-[13px]" style={{ color: C.leafDark }}>Open ›</Txt>
                   </View>
@@ -229,6 +275,18 @@ export default function GenieChef() {
         </View>
 
         {/* ideas */}
+        {ideasStale && !ask.isPending ? (
+          <Animated.View entering={FadeIn} className="mx-5 mt-6 flex-row items-center rounded-2xl p-3" style={{ backgroundColor: C.honey, gap: 10 }} testID="genie-ideas-stale">
+            <Txt weight="bold" className="flex-1 text-[14px]" style={{ color: C.onHoney }}>Your kitchen changed since these ideas. Want new ones?</Txt>
+            <PressableScale testID="genie-ideas-refresh" accessibilityRole="button" accessibilityLabel="Get new ideas" onPress={() => ask.mutate()}>
+              <View className="h-10 flex-row items-center rounded-full px-3.5" style={{ backgroundColor: C.ink, gap: 6 }}>
+                <RefreshCw size={15} color={C.cream} />
+                <Txt weight="extrabold" className="text-[13px]" style={{ color: C.cream }}>New ideas</Txt>
+              </View>
+            </PressableScale>
+          </Animated.View>
+        ) : null}
+
         <View className="mt-8 px-5" style={{ gap: 16 }} testID="genie-ideas">
           {ideas.map((idea, i) => {
             // Same rules as the recipe screen: basics and staples (oil, butter, spices) count as had.

@@ -14,7 +14,8 @@ import { DIETS } from '@/lib/services/genie-recipes';
 import { Logo } from '@/components/brand';
 import { Avatar, PressableScale, Txt, HardShadow, GenieBubble, MatchStamp, StatusDot } from '@/components/ui';
 import { pantryGreeting } from '@/lib/genie';
-import { expiryLabel, freshness, matchRecipe, pickTonight, todayKey } from '@/lib/kitchen';
+import { expiryLabel, freshness, kitchenInsight, matchRecipe, pickTonight, todayKey } from '@/lib/kitchen';
+import { toast } from '@/lib/store';
 import { TonightCard } from '@/components/tonight-card';
 import { DayOneChecklist } from '@/components/day-one';
 import { useApp } from '@/lib/store';
@@ -49,6 +50,10 @@ export default function TonightScreen() {
     return [...recipes, ...catalogForDiets(catalogItems, diets).filter((r) => !own.has(r.title.toLowerCase()))];
   }, [recipes, catalogItems, diets]);
   const ranked = useMemo(() => pickTonight(pool, pantry, { passes: plan?.passes ?? [], cookLog, today }), [pool, pantry, plan?.passes, cookLog, today, revision]);
+  const insight = useMemo(() => kitchenInsight(pool, pantry, diets), [pool, pantry, diets, revision]);
+  const groceries = useApp((s) => s.groceries);
+  const addGrocery = useApp((s) => s.addGrocery);
+  const insightOnList = !!insight?.buy && groceries.some((g) => !g.checked && g.name.toLowerCase() === insight.buy!.toLowerCase());
   const lockedRecipe = plan?.recipeId ? pool.find((r) => r.id === plan.recipeId) : undefined;
   const hero = lockedRecipe ? { recipe: lockedRecipe, match: matchRecipe(lockedRecipe, pantry) } : ranked[0];
   const suggestions = hero ? [hero, ...ranked.filter((x) => x.recipe.id !== hero.recipe.id).slice(0, 2)] : [];
@@ -87,6 +92,26 @@ export default function TonightScreen() {
           </View>
           <GenieBubble testID="fridgegenie-greeting-card" style={{ marginBottom: 14 }}>
             <Txt testID="fridgegenie-greeting" style={{ color: C.onGreen, fontSize: 14, lineHeight: 20 }}>{pantryGreeting(pantry)}</Txt>
+            {insight ? (
+              <Txt testID="fridgegenie-insight" weight="bold" style={{ color: C.onGreen, fontSize: 14, lineHeight: 20 }}>
+                {'\n'}{insight.text}
+                {insight.buy ? (
+                  <Txt
+                    testID="fridgegenie-insight-add"
+                    weight="extrabold"
+                    accessibilityRole="button"
+                    onPress={() => {
+                      if (insightOnList) return;
+                      addGrocery(insight.buy!);
+                      toast(`Added ${insight.buy} to the list`);
+                    }}
+                    style={{ color: C.honeyOnForest, fontSize: 14, textDecorationLine: insightOnList ? 'none' : 'underline' }}
+                  >
+                    {insightOnList ? '  ✓ On your list' : '  + Add to list'}
+                  </Txt>
+                ) : null}
+              </Txt>
+            ) : null}
           </GenieBubble>
           <PressableScale testID="tonight-genie-chef" accessibilityRole="button" accessibilityLabel="Ask FridgeGenie to make dinner from my kitchen" onPress={() => router.push('/genie-chef')} style={{ marginBottom: 24 }}>
             <View className="flex-row items-center rounded-[22px] px-4 py-3" style={{ backgroundColor: C.paper, borderWidth: 1.5, borderColor: C.ink, gap: 12 }}>

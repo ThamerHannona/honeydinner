@@ -151,7 +151,21 @@ export interface RecipeMatch {
   missing: Ingredient[];
   ratio: number;
   usesExpiring: number;
+  /** Main protein(s) the recipe needs that you have / don't have. */
+  proteinHave: number;
+  proteinMissing: number;
+  /** How good a pick this is for YOUR kitchen right now (higher = better). */
+  score: number;
 }
+
+const PROTEIN_RE =
+  /\b(chicken|beef|steak|sirloin|ribeye|brisket|short ribs?|ground (beef|turkey|pork|lamb|meat)|mince|shrimp|prawns?|salmon|tuna|cod|tilapia|halibut|trout|sea bass|fish|crab|lobster|scallops?|mussels?|clams?|squid|calamari|pork|bacon|sausages?|chorizo|ham|prosciutto|pancetta|lamb|veal|turkey|duck|quail|tofu|tempeh|seitan|lentils?|chickpeas?|black beans?|kidney beans?|cannellini|edamame)\b/;
+/** Main protein (meat, fish, tofu, beans). Eggs are a side protein: they don't make a dinner on their own. */
+export const isProtein = (name: string) => {
+  const n = name.toLowerCase();
+  if (/\begg(s| whites?| yolks?)?\b/.test(n) && !/\beggplants?\b/.test(n) && !PROTEIN_RE.test(n.replace(/\bduck eggs?\b/, ''))) return false;
+  return PROTEIN_RE.test(normalizeName(name)) || PROTEIN_RE.test(n);
+};
 
 export const pantryHas = (pantry: PantryItem[], ingredientName: string) =>
   isBasic(ingredientName) ||
@@ -165,17 +179,75 @@ export const matchRecipe = (recipe: Recipe, pantry: PantryItem[]): RecipeMatch =
   const usesExpiring = counted.filter((i) => soon.some((p) => namesMatch(p.name, i.name))).length;
   const total = counted.length;
   const have = total - missing.length;
-  return { have, total, missing, ratio: total === 0 ? 0 : have / total, usesExpiring };
+  const ratio = total === 0 ? 0 : have / total;
+  const proteins = counted.filter((i) => isProtein(i.name));
+  const proteinMissing = proteins.filter((i) => missing.includes(i)).length;
+  const proteinHave = proteins.length - proteinMissing;
+  // A real dinner you can mostly make beats a 1-ingredient dish; having the main protein matters most.
+  const score =
+    ratio +
+    Math.min(have, 6) * 0.1 +
+    proteinHave * 0.45 -
+    proteinMissing * 0.35 -
+    Math.max(0, missing.length - 2) * 0.08 +
+    usesExpiring * 0.15 -
+    (total < 2 ? 0.3 : 0);
+  return { have, total, missing, ratio, usesExpiring, proteinHave, proteinMissing, score };
 };
+
+export interface KitchenInsight {
+  text: string;
+  /** Ingredient to add to the shopping list, if there's one obvious buy. */
+  buy?: string;
+}
+
+/**
+ * FridgeGenie's proactive read of your kitchen: out of protein? one item away from a bunch of dinners?
+ * Recomputed every time the kitchen or recipes change.
+ */
+export function kitchenInsight(pool: Recipe[], pantry: PantryItem[], diets: string[] = []): KitchenInsight | null {
+  if (!pool.length) return null;
+  const fresh = pantry.filter((p) => freshness(p.expiresAt) !== 'expired');
+  const proteinsOnHand = fresh.filter((p) => isProtein(p.name));
+  // Which single missing ingredient would unlock the most dinners?
+  const unlock = new Map<string, { name: string; count: number; protein: boolean }>();
+  let ready = 0;
+  for (const r of pool) {
+    const m = matchRecipe(r, fresh);
+    if (m.total < 1) continue;
+    if (m.missing.length === 0) ready++;
+    if (m.missing.length !== 1) continue;
+    const name = m.missing[0].name.replace(/\s*\(.*?\)\s*/g, ' ').split(',')[0].trim().toLowerCase();
+    const key = coreName(name);
+    const cur = unlock.get(key) ?? { name, count: 0, protein: isProtein(name) };
+    if (name.length < cur.name.length) cur.name = name; // keep the plainest wording ("chicken thighs" over "bone-in chicken thighs")
+    cur.count++;
+    unlock.set(key, cur);
+  }
+  const best = [...unlock.values()].sort((a, b) => b.count - a.count || Number(b.protein) - Number(a.protein))[0];
+  const bestProtein = [...unlock.values()].filter((u) => u.protein).sort((a, b) => b.count - a.count)[0];
+  if (fresh.length && !proteinsOnHand.length) {
+    const plant = diets.some((d) => d === 'vegan' || d === 'plant-based' || d === 'vegetarian');
+    const pick = bestProtein ?? { name: plant ? 'tofu' : 'chicken thighs', count: 0 };
+    return {
+      text: pick.count
+        ? `You're out of protein. Grab ${pick.name} and you can make ${pick.count} more dinner${pick.count === 1 ? '' : 's'}.`
+        : `You're out of protein. Add ${plant ? 'tofu, beans or lentils' : 'chicken, beef or shrimp'} and I'll have way more dinners for you.`,
+      buy: pick.name,
+    };
+  }
+  if (best && best.count >= 2) {
+    return { text: `${ready ? `You can make ${ready} dinner${ready === 1 ? '' : 's'} right now. ` : ''}Grab ${best.name} and ${best.count} more open up.`, buy: best.name };
+  }
+  if (ready) return { text: `You can make ${ready} dinner${ready === 1 ? '' : 's'} with what you have right now.` };
+  return null;
+}
 
 export const rankSuggestions = (recipes: Recipe[], pantry: PantryItem[]) =>
   recipes
     .map((r) => ({ recipe: r, match: matchRecipe(r, pantry) }))
     .filter((x) => x.match.have > 0)
-    .sort(
-      (a, b) =>
-        b.match.ratio + b.match.usesExpiring * 0.08 - (a.match.ratio + a.match.usesExpiring * 0.08),
-    );
+    .sort((a, b) => b.match.score - a.match.score);
 
 /** Local day key YYYY-MM-DD. */
 export const todayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -202,7 +274,7 @@ export const pickTonight = (
   return pool
     .map((recipe) => {
       const match = matchRecipe(recipe, pantry);
-      const score = match.ratio + match.usesExpiring * 0.15 + dayHash(recipe.id + opts.today) * 0.35;
+      const score = match.score + dayHash(recipe.id + opts.today) * 0.2;
       return { recipe, match, score };
     })
     .sort((a, b) => b.score - a.score);
