@@ -16,7 +16,7 @@ import { ConfirmDelete } from '@/components/confirm-delete';
 
 import type { SourcePlatform } from '@/lib/types';
 import { quip } from '@/lib/quips';
-import { catalogForDiets, catalogToRecipe, refreshCatalog, useCatalog, type CatalogCategory } from '@/lib/catalog';
+import { catalogForDiets, catalogToRecipe, hasPhoto, refreshCatalog, useCatalog, type CatalogCategory } from '@/lib/catalog';
 import { DIETS } from '@/lib/services/genie-recipes';
 import { Sparkles } from 'lucide-react-native';
 
@@ -53,7 +53,7 @@ export default function RecipesScreen() {
   const discoverList = useMemo(() => {
     if (mode !== 'discover') return [];
     if (category === 'forYou') return catalogForDiets(catalogItems, diets);
-    return catalogItems.filter((c) => c.category === category).map(catalogToRecipe);
+    return catalogItems.filter((c) => c.category === category && hasPhoto(c)).map(catalogToRecipe);
   }, [mode, category, catalogItems, diets]);
   const ownMatches = useMemo(() => recipes.map((recipe) => ({ recipe, match: matchRecipe(recipe, pantry) })), [recipes, pantry, revision]);
   const matches = useMemo(() => (mode === 'discover' ? discoverList.map((recipe) => ({ recipe, match: matchRecipe(recipe, pantry) })) : ownMatches), [mode, discoverList, ownMatches, pantry]);

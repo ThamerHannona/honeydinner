@@ -4,6 +4,7 @@
  * and Tonight / FridgeGenie pick from it alongside the user's own recipes.
  */
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -21,6 +22,7 @@ export interface CatalogItem {
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80&auto=format&fit=crop';
 const DAY = 3 * 60 * 60 * 1000; // refresh every few hours (new photos and recipes keep arriving)
+const SOON = 5 * 60 * 1000; // …or every 5 minutes while some dish photos are still being made
 
 interface CatalogState {
   items: CatalogItem[];
@@ -44,7 +46,8 @@ export const useCatalog = create<CatalogState>()(
 export async function refreshCatalog(force = false): Promise<void> {
   const st = useCatalog.getState();
   if (st.loading) return;
-  if (!force && st.items.length && Date.now() - st.fetchedAt < DAY) return;
+  const missing = st.items.some((c) => !c.image);
+  if (!force && st.items.length && Date.now() - st.fetchedAt < (missing ? SOON : DAY)) return;
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '');
   const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
   if (!base) return;
@@ -71,8 +74,15 @@ export async function refreshCatalog(force = false): Promise<void> {
 export function useCatalogSync() {
   useEffect(() => {
     void refreshCatalog();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void refreshCatalog();
+    });
+    return () => sub.remove();
   }, []);
 }
+
+/** Only show cookbook recipes once their own dish photo exists — never a stand-in picture. */
+export const hasPhoto = (c: CatalogItem) => !!c.image;
 
 const toRecipeCache = new Map<string, Recipe>();
 export function catalogToRecipe(c: CatalogItem): Recipe {
@@ -126,7 +136,8 @@ export function adoptCatalogRecipe(id: string): Recipe | undefined {
 
 /** Cookbook recipes that suit the user's eating style (all non-desserts when none is set). */
 export function catalogForDiets(items: CatalogItem[], diets: Diet[]): Recipe[] {
-  const pool = diets.length ? items.filter((c) => diets.includes(c.category as Diet)) : items.filter((c) => c.category !== 'dessert');
+  const withPhotos = items.filter(hasPhoto);
+  const pool = diets.length ? withPhotos.filter((c) => diets.includes(c.category as Diet)) : withPhotos.filter((c) => c.category !== 'dessert');
   const seen = new Set<string>();
   const out: Recipe[] = [];
   for (const c of pool) {

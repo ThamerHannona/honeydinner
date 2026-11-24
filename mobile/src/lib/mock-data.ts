@@ -30,7 +30,7 @@ export const seedMembers: Member[] = [
   { id: ME_ID, name: 'You', initials: 'Y', color: '#2E9E5B', isMe: true },
 ];
 
-const img = (id: string) => `https://images.unsplash.com/${id}?w=900&q=80&auto=format&fit=crop`;
+const dish = (hash: string) => `https://rzacuyrcbujcnkpoktyg.supabase.co/storage/v1/object/public/step-images/${hash}.jpg`;
 
 let pid = 0;
 const p = (
@@ -89,7 +89,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-garlic-chicken',
     title: 'Garlic Butter Chicken',
-    image: img('photo-1598515214211-89d3c73ae83b'),
+    image: dish('62e53590aeb30bc7975fdf3c4f1c60f7af98605e'),
     servings: 2,
     cookTime: 25,
     ingredients: [
@@ -117,7 +117,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-tuscan-pasta',
     title: 'Creamy Tuscan Spinach Pasta',
-    image: img('photo-1563379926898-05f4575a45d8'),
+    image: dish('ef61fa092e745eab333b66c3b2782a1dce36ae5a'),
     servings: 4,
     cookTime: 20,
     ingredients: [
@@ -144,7 +144,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-shrimp-rice',
     title: '15-Minute Shrimp Fried Rice',
-    image: img('photo-1603133872878-684f208fb84b'),
+    image: dish('5ad88e7517ebebab1f1198126dc8e1a699ca6a42'),
     servings: 3,
     cookTime: 15,
     ingredients: [
@@ -171,7 +171,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-honey-salmon',
     title: 'Sticky Honey Garlic Salmon',
-    image: img('photo-1467003909585-2f8a72700288'),
+    image: dish('653e9da262b92734b08c228a68513709d271bd93'),
     servings: 2,
     cookTime: 20,
     ingredients: [
@@ -197,7 +197,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-frittata',
     title: 'Spinach & Cheddar Frittata',
-    image: img('photo-1482049016688-2d3e1b311543'),
+    image: dish('a26c75a2292bd2d34fadd14c1cd412331a0b5fbc'),
     servings: 4,
     cookTime: 25,
     ingredients: [
@@ -222,7 +222,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-fajitas',
     title: 'Sheet Pan Chicken Fajitas',
-    image: img('photo-1565299585323-38d6b0865b47'),
+    image: dish('5bf933d1ec0613a40132de4eb64836aec8be85f9'),
     servings: 4,
     cookTime: 30,
     ingredients: [
@@ -248,7 +248,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-chickpea-curry',
     title: 'Chickpea Coconut Curry',
-    image: img('photo-1455619452474-d2be8b1e70cd'),
+    image: dish('97e4d5cfeeef7d8a008ff1781cd1ccd6b7fffa16'),
     servings: 4,
     cookTime: 35,
     ingredients: [
@@ -275,7 +275,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-beef-broccoli',
     title: 'Weeknight Beef & Broccoli',
-    image: img('photo-1512058564366-18510be2db19'),
+    image: dish('67e086e11062921827ec0fac637763f912e42e36'),
     servings: 3,
     cookTime: 25,
     ingredients: [
@@ -300,7 +300,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-shakshuka',
     title: 'Pepper Shakshuka',
-    image: img('photo-1590412200988-a436970781fa'),
+    image: dish('99d4230ed78bcd12f8c67fd225937fdf2009d09c'),
     servings: 2,
     cookTime: 30,
     ingredients: [
@@ -326,7 +326,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-lemon-orzo',
     title: 'Lemon Parmesan Orzo',
-    image: img('photo-1551183053-bf91a1d81141'),
+    image: dish('085dc9789a7e76994002f1588933a46212cac301'),
     servings: 3,
     cookTime: 18,
     ingredients: [
@@ -351,7 +351,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-peanut-noodles',
     title: 'Spicy Peanut Noodles',
-    image: img('photo-1569718212165-3a8278d5f624'),
+    image: dish('e3436c97ed948f597141fa12cedb901f75fd12aa'),
     servings: 2,
     cookTime: 15,
     ingredients: [
@@ -375,7 +375,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-smash-tacos',
     title: 'Smash Burger Tacos',
-    image: img('photo-1551504734-5ee1c4a1479b'),
+    image: dish('79826d7aaab21e5f32dc99d13885133dfe518170'),
     servings: 4,
     cookTime: 20,
     ingredients: [
@@ -400,7 +400,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-chicken-soup',
     title: 'Cozy Chicken Noodle Soup',
-    image: img('photo-1547592180-85f173990554'),
+    image: dish('7e3d9fc7c1b09c61cfa972e5e4736a1fe5bfb9c5'),
     servings: 6,
     cookTime: 45,
     ingredients: [
@@ -426,7 +426,7 @@ export const seedRecipes = (): Recipe[] => [
   {
     id: 'r-meatballs',
     title: "Grandma's Sunday Meatballs",
-    image: img('photo-1473093295043-cdd812d0e601'),
+    image: dish('f53011cb9b7287c22fb572f1658adc167a0f89cf'),
     servings: 4,
     cookTime: 50,
     ingredients: [
