@@ -12,7 +12,7 @@ const fmtQty = (q: number | null) => {
 };
 
 /** Opens the iOS share sheet with the whole recipe as text, so whoever gets it
- *  (Lena in Messages, a group chat…) can read and cook it even without the app. */
+ *  (a partner in Messages, a group chat…) can read and cook it even without the app. */
 export async function shareRecipe(recipe: Recipe, toName?: string | null) {
   const ingredients = recipe.ingredients
     .map((i) => `• ${[fmtQty(i.qty), i.unit, i.name].filter(Boolean).join(' ')}`)

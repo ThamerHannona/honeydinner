@@ -67,14 +67,18 @@ Deno.serve(async (req) => {
     const step = String(body?.step ?? "").slice(0, 500).trim();
     if (!title || !step) return json({ error: "Missing title or step" }, 400);
     const recipeId = typeof body?.recipeId === "string" ? body.recipeId : null;
-    const blocked = await gateUsage(req, "cook", { cors, recipeId });
-    if (blocked) return blocked;
+    // Finished-dish photos (recipe covers) are free for everyone; only cooking-mode step pictures are Plus.
+    const isCover = body?.cover === true || (!recipeId && /^the finished dish/i.test(step));
+    if (!isCover) {
+      const blocked = await gateUsage(req, "cook", { cors, recipeId });
+      if (blocked) return blocked;
+    }
     const ingredients = Array.isArray(body?.ingredients) ? body.ingredients.map(String).slice(0, 15).join(", ") : "";
 
     const path = `${await sha(`v2|${title}|${step}`)}.jpg`;
     const publicUrl = `${base}/storage/v1/object/public/${BUCKET}/${path}`;
     const head = await fetch(publicUrl, { method: "HEAD" }).catch(() => null);
-    if (head?.ok) { await consumeUsage(req, "cook", { recipeId }); return json({ url: publicUrl, cached: true }); }
+    if (head?.ok) { if (!isCover) await consumeUsage(req, "cook", { recipeId }); return json({ url: publicUrl, cached: true }); }
 
     const prompt =
       `Warm, natural-light cookbook photograph of a home cook doing this step of "${title}": ${step}. ` +
@@ -93,7 +97,7 @@ Deno.serve(async (req) => {
       console.log("[step-image] upload", up.status, (await up.text().catch(() => "")).slice(0, 160));
       return json({ error: "Couldn't save the image" }, 502);
     }
-    await consumeUsage(req, "cook", { recipeId });
+    if (!isCover) await consumeUsage(req, "cook", { recipeId });
     return json({ url: publicUrl, cached: false });
   } catch (e) {
     console.log("[step-image] error", String(e));

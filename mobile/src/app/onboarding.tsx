@@ -253,7 +253,7 @@ export default function Onboarding() {
 
         {houseMode === 'partner' && !household ? (
           <Animated.View entering={FadeInDown.springify().damping(16)} style={{ gap: 10, marginTop: 6 }}>
-            <TextInput testID="onboarding-partner-name" value={partner} onChangeText={setPartner} placeholder="Their name (e.g. Lena)" placeholderTextColor={C.inkFaint} autoCapitalize="words" autoCorrect={false} style={[inputStyle, { height: 54, borderRadius: 16, paddingHorizontal: 16, fontSize: 17 }]} />
+            <TextInput testID="onboarding-partner-name" value={partner} onChangeText={setPartner} placeholder="Their name" placeholderTextColor={C.inkFaint} autoCapitalize="words" autoCorrect={false} style={[inputStyle, { height: 54, borderRadius: 16, paddingHorizontal: 16, fontSize: 17 }]} />
           </Animated.View>
         ) : null}
 
