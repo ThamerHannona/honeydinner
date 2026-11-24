@@ -1,3 +1,4 @@
+import { useRecipe } from '@/lib/catalog';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Share, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -78,7 +79,7 @@ export default function ShareCard() {
   const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const recipe = useApp((s) => s.recipes.find((r) => r.id === id));
+  const recipe = useRecipe(id);
   const partnerName = useApp((s) => s.members.find((m) => !m.isMe)?.name ?? null);
   const sharedKitchen = useApp((s) => !!s.household && s.household.members.length > 1);
   const sendRecipeToPartner = useApp((s) => s.sendRecipeToPartner);

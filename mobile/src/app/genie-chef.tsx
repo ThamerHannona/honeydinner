@@ -15,6 +15,7 @@ import { DIETS, askGenieForRecipes, dishPhoto, ideaToDraft, type GenieIdea } fro
 import type { Diet } from '@/lib/types';
 import { pantryHas, matchRecipe } from '@/lib/kitchen';
 import { RecipeImage } from '@/components/recipe-image';
+import { catalogForDiets, useCatalog } from '@/lib/catalog';
 
 const MOODS = ['Quick', 'Comfort food', 'Light', 'Something new'] as const;
 const THINKING = [
@@ -38,6 +39,11 @@ export default function GenieChef() {
   const [ideas, setIdeas] = useState<GenieIdea[]>([]);
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [thinking, setThinking] = useState<number>(0);
+  const catalogItems = useCatalog((s) => s.items);
+  const fromCookbook = useMemo(() => {
+    const list = catalogForDiets(catalogItems, diets).map((r) => ({ r, m: matchRecipe(r, pantry) }));
+    return list.filter((x) => x.m.have > 0).sort((a, b) => b.m.ratio - a.m.ratio || a.m.missing.length - b.m.missing.length).slice(0, 4);
+  }, [catalogItems, diets, pantry]);
   // Opened from an expiry nudge: "use these up"
   const params = useLocalSearchParams<{ use?: string; recipe?: string }>();
   const useUp = useMemo(() => (params.use ? String(params.use).split('|').map((x) => x.trim()).filter(Boolean) : []), [params.use]);
@@ -148,6 +154,26 @@ export default function GenieChef() {
               </PressableScale>
             ) : null}
             <Txt weight="semibold" className="mt-3 text-[13px]" style={{ color: C.inkSoft }}>{ask.isPending ? 'Cooking up ideas that use them…' : 'New ideas that use them are below.'}</Txt>
+          </View>
+        ) : null}
+
+        {fromCookbook.length ? (
+          <View testID="genie-cookbook" className="mt-6 px-5">
+            <Txt label weight="extrabold" className="mb-3 text-[13px] uppercase tracking-widest" style={{ color: C.inkSoft }}>From the cookbook · you have most of it</Txt>
+            <View style={{ gap: 10 }}>
+              {fromCookbook.map(({ r, m }) => (
+                <PressableScale key={r.id} testID={`genie-cookbook-${r.id}`} accessibilityRole="button" accessibilityLabel={`Open ${r.title}`} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: r.id } })}>
+                  <View className="flex-row items-center rounded-2xl bg-white p-2.5" style={{ gap: 12, borderWidth: 1, borderColor: C.hairline }}>
+                    <RecipeImage source={{ uri: r.image }} style={{ width: 56, height: 56, borderRadius: 14 }} contentFit="cover" />
+                    <View className="flex-1">
+                      <Txt weight="extrabold" className="text-[15px]" numberOfLines={2}>{r.title}</Txt>
+                      <Txt weight="semibold" className="text-[12px]" style={{ color: C.inkSoft }}>{r.cookTime} min · {m.have}/{m.total} in your kitchen</Txt>
+                    </View>
+                    <Txt weight="extrabold" className="text-[13px]" style={{ color: C.leafDark }}>Open ›</Txt>
+                  </View>
+                </PressableScale>
+              ))}
+            </View>
           </View>
         ) : null}
 

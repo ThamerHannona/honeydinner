@@ -1,3 +1,4 @@
+import { adoptCatalogRecipe, isCatalogId } from '@/lib/catalog';
 import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -39,6 +40,7 @@ export function TonightCard({
   };
   const lock = () => {
     haptic.success();
+    if (isCatalogId(recipe.id)) adoptCatalogRecipe(recipe.id); // so your partner gets it too
     useApp.getState().lockTonight(recipe.id);
     setLine(null);
     toast(quip.locked(recipe.title, partner));

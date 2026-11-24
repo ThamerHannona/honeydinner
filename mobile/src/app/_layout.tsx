@@ -21,6 +21,7 @@ import { ThemeProvider, themeVariables, useTheme } from '@/lib/theme-context';
 import { useHouseholdSync } from '@/lib/household';
 import { useExpiryNudges } from '@/lib/expiry-nudges';
 import { useGeniePhotos } from '@/lib/use-genie-photos';
+import { useCatalogSync } from '@/lib/catalog';
 
 export const unstable_settings = { initialRouteName: '(tabs)' };
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -31,6 +32,7 @@ function ShareInboxListener() {
   useHouseholdSync();
   useExpiryNudges();
   useGeniePhotos();
+  useCatalogSync();
   return null;
 }
 

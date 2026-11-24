@@ -1,3 +1,4 @@
+import { adoptCatalogRecipe, useRecipe } from '@/lib/catalog';
 import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import { useTheme } from '@/lib/theme-context';
 import { goBack } from '@/lib/nav';
@@ -19,7 +20,8 @@ import { quip } from '@/lib/quips';
 export default function RecipeDetail() {
   const { C } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const recipe = useApp((s) => s.recipes.find((r) => r.id === id));
+  const recipe = useRecipe(id);
+  const isOwn = useApp((s) => s.recipes.some((r) => r.id === id));
   const pantry = useApp((s) => s.pantry);
   const groceries = useApp((s) => s.groceries);
   const toggleSaved = useApp((s) => s.toggleSaved);
@@ -76,10 +78,12 @@ export default function RecipeDetail() {
             <PressableScale testID="recipe-send" accessibilityRole="button" accessibilityLabel={partnerName ? `Send recipe to ${partnerName}` : 'Share recipe'} onPress={onSend}>
               <View className="h-11 flex-row items-center justify-center rounded-full px-4" style={{ backgroundColor: C.paperOverlay, gap: 6 }}><Send size={18} color={C.ink} /><Txt weight="extrabold" className="text-[13px]">{partnerName ? `Send to ${partnerName}` : 'Share'}</Txt></View>
             </PressableScale>
+            {isOwn ? (
             <PressableScale testID="recipe-delete" accessibilityRole="button" accessibilityLabel="Delete recipe" onPress={() => setConfirmDelete(true)}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><Trash2 size={19} color={C.ink} /></View>
             </PressableScale>
-            <PressableScale testID="recipe-save-toggle" accessibilityRole="button" accessibilityLabel={recipe.saved ? 'Unsave recipe' : 'Save recipe'} accessibilityState={{ selected: recipe.saved }} onPress={() => { haptic.success(); toggleSaved(recipe.id); }}>
+            ) : null}
+            <PressableScale testID="recipe-save-toggle" accessibilityRole="button" accessibilityLabel={recipe.saved ? 'Unsave recipe' : 'Save recipe'} accessibilityState={{ selected: recipe.saved }} onPress={() => { haptic.success(); if (!isOwn) { adoptCatalogRecipe(recipe.id); toast('Saved to your recipes ❤️'); } else toggleSaved(recipe.id); }}>
               <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: C.paperOverlay }}><Heart size={21} color={C.ink} fill={recipe.saved ? C.honey : 'transparent'} /></View>
             </PressableScale>
             </View>

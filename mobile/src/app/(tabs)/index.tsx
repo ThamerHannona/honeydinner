@@ -1,3 +1,4 @@
+import { catalogForDiets, useCatalog } from '@/lib/catalog';
 import { reportBrokenPhoto } from '@/lib/use-genie-photos';
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
@@ -41,8 +42,14 @@ export default function TonightScreen() {
   const partner = useApp((s) => (s.household ? s.household.members.find((m) => m.memberId !== s.household?.memberId)?.name ?? null : null));
   const today = todayKey();
   const plan = tonight?.date === today ? tonight : null;
-  const ranked = useMemo(() => pickTonight(recipes, pantry, { passes: plan?.passes ?? [], cookLog, today }), [recipes, pantry, plan?.passes, cookLog, today, revision]);
-  const lockedRecipe = plan?.recipeId ? recipes.find((r) => r.id === plan.recipeId) : undefined;
+  const catalogItems = useCatalog((s) => s.items);
+  // Your recipes plus the built-in cookbook for your eating style (yours win on a tie).
+  const pool = useMemo(() => {
+    const own = new Set(recipes.map((r) => r.title.toLowerCase()));
+    return [...recipes, ...catalogForDiets(catalogItems, diets).filter((r) => !own.has(r.title.toLowerCase()))];
+  }, [recipes, catalogItems, diets]);
+  const ranked = useMemo(() => pickTonight(pool, pantry, { passes: plan?.passes ?? [], cookLog, today }), [pool, pantry, plan?.passes, cookLog, today, revision]);
+  const lockedRecipe = plan?.recipeId ? pool.find((r) => r.id === plan.recipeId) : undefined;
   const hero = lockedRecipe ? { recipe: lockedRecipe, match: matchRecipe(lockedRecipe, pantry) } : ranked[0];
   const suggestions = hero ? [hero, ...ranked.filter((x) => x.recipe.id !== hero.recipe.id).slice(0, 2)] : [];
   const day = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();

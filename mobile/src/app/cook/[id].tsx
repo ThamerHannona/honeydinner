@@ -1,3 +1,4 @@
+import { adoptCatalogRecipe, isCatalogId, useRecipe } from '@/lib/catalog';
 import { useTheme } from '@/lib/theme-context';
 import { goBack } from '@/lib/nav';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -58,7 +59,9 @@ export default function CookMode() {
     });
     return () => { cancelled = true; };
   }, [recipeId, sharedUrl]);
-  const recipe = useApp((s) => s.recipes.find((r) => r.id === recipeId));
+  // Cooking a cookbook recipe makes it yours (and shares it with your kitchen).
+  useEffect(() => { if (recipeId && isCatalogId(recipeId)) adoptCatalogRecipe(recipeId); }, [recipeId]);
+  const recipe = useRecipe(recipeId);
   const insets = useSafeAreaInsets();
   const [idx, setIdx] = useState<number>(0);
   const [showAll, setShowAll] = useState<boolean>(false);
