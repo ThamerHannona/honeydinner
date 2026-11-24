@@ -86,10 +86,27 @@ export const namesMatch = (a: string, b: string) => {
   const nb = normalizeName(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
-  // word-boundary containment, e.g. "fresh spinach" ~ "spinach"
+  // word-boundary containment, e.g. "fresh spinach" ~ "spinach", "chicken breast" ~ "chicken"
   const pad = (s: string) => ` ${s} `;
-  return pad(na).includes(pad(nb)) || pad(nb).includes(pad(na));
+  const [short, long] = na.length <= nb.length ? [na, nb] : [nb, na];
+  if (!pad(long).includes(pad(short))) return false;
+  // ...but not when the extra words make it a different food:
+  // "duck eggs" ≠ "eggs", "coconut milk" ≠ "milk", "chicken broth" ≠ "chicken", "garlic powder" ≠ "garlic".
+  const shortWords = new Set(short.split(' '));
+  const extra = long.split(' ').filter((w) => !shortWords.has(w));
+  return !extra.some((w) => DIFFERENT_FOOD.has(w));
 };
+
+/** Words that turn one food into another when added to its name. */
+const DIFFERENT_FOOD = new Set(
+  [
+    // a different animal / plant source
+    'duck', 'quail', 'goose', 'coconut', 'almond', 'oat', 'soy', 'peanut', 'cashew', 'sweet', 'sour',
+    // a product made from it
+    'broth', 'stock', 'sauce', 'powder', 'paste', 'oil', 'butter', 'flour', 'seasoning', 'bouillon', 'cube', 'extract', 'vinegar', 'syrup',
+    'chip', 'crisp', 'noodle', 'breadcrumb', 'crumb', 'cream', 'milk', 'cheese', 'water', 'wine', 'jam', 'jelly', 'candy', 'cracker', 'bar', 'mix', 'dressing',
+  ].map((w) => normalizeName(w)),
+);
 
 /** Mark unchecked grocery rows that match any of the bought names. */
 export function checkOffBoughtGroceries(groceries: GroceryItem[], boughtNames: string[], now: string): GroceryItem[] {
