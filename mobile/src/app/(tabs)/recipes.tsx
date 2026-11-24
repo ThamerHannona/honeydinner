@@ -185,7 +185,15 @@ export default function RecipesScreen() {
           <View testID="recipes-empty-state" className="px-5 py-10">
             <AnimatedFridgeGenie size={88} mood="idle" testID="recipes-empty-genie" />
             <Txt display weight="bold" style={{ fontSize: 25, marginTop: 12 }}>{mode === 'discover' && !catalogItems.length ? 'Loading the cookbook…' : recipes.length ? 'Nothing quite matches.' : 'Your next keeper awaits.'}</Txt>
-            <Txt className="mt-2" style={{ color: C.inkSoft }}>{recipes.length ? 'Try another source, ingredient or filter.' : 'Add a recipe with the + button to start your collection.'}</Txt>
+            <Txt className="mt-2" style={{ color: C.inkSoft }}>{mode === 'mine' && matchFilter ? 'None of your saved recipes fit yet, but the cookbook has plenty.' : recipes.length ? 'Try another source, ingredient or filter.' : 'Add a recipe with the + button to start your collection.'}</Txt>
+            {mode === 'mine' && catalogItems.length ? (
+              <PressableScale testID="recipes-empty-discover" accessibilityRole="button" accessibilityLabel="See cookbook recipes" onPress={() => { setMode('discover'); setSource(null); }} className="mt-4 self-start">
+                <View className="h-11 flex-row items-center rounded-full px-5" style={{ backgroundColor: C.ink, gap: 6 }}>
+                  <Sparkles size={16} color={C.honey} />
+                  <Txt weight="extrabold" className="text-[14px]" style={{ color: C.cream }}>{matchFilter === 'ready' ? 'See what the cookbook can make now' : 'Browse the cookbook'}</Txt>
+                </View>
+              </PressableScale>
+            ) : null}
           </View>
         ) : null}
       </ScrollView>

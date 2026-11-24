@@ -23,7 +23,11 @@ export const pantryGreeting = (pantry: PantryItem[], now = new Date()) => {
     .filter((p) => freshness(p.expiresAt) === 'soon')
     .sort((a, b) => (a.expiresAt ?? '').localeCompare(b.expiresAt ?? ''));
   if (soon.length >= 2) return `${hi}! Your ${shortName(soon[0].name)} and ${shortName(soon[1].name)} need using.`;
-  if (soon.length === 1) return `${hi}! That ${shortName(soon[0].name)} won't wait much longer.`;
+  if (soon.length === 1) {
+    const n = shortName(soon[0].name);
+    const plural = /[^s]s$|ies$/.test(n) && !/(hummus|asparagus|couscous|molasses)$/.test(n);
+    return `${hi}! ${plural ? 'Those' : 'That'} ${n} won't wait much longer.`;
+  }
   if (pantry.some((item) => freshness(item.expiresAt) === 'expired')) {
     return `${hi}! Check those expired items. Let’s cook with what’s still fresh.`;
   }

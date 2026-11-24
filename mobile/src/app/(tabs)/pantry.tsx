@@ -11,6 +11,7 @@ import { ListReveal, PressableScale, Txt, StatusDot } from '@/components/ui';
 import { expiryLabel, freshness, matchRecipe } from '@/lib/kitchen';
 import { filterPantry, PANTRY_LOCATIONS } from '@/lib/pantry';
 import { useApp } from '@/lib/store';
+import { catalogForDiets, catalogToRecipe, useCatalog } from '@/lib/catalog';
 import { haptic, fonts } from '@/lib/theme';
 import type { PantryItem, StorageLocation } from '@/lib/types';
 
@@ -34,16 +35,25 @@ export default function PantryScreen() {
   const [removed, setRemoved] = useState<PantryItem | null>(null);
   const items = useMemo(() => filterPantry(pantry, location, query), [pantry, location, query, revision]);
   const expiring = pantry.filter((item) => freshness(item.expiresAt) === 'soon');
-  const usefulRecipes = recipes.filter((recipe) => matchRecipe(recipe, pantry).usesExpiring > 0).length;
+  const diets = useApp((s) => s.diets);
+  const catalogItems = useCatalog((s) => s.items);
+  // Count your recipes AND the cookbook, so "N recipes use them up" isn't stuck at 0.
+  const usefulRecipes = useMemo(() => {
+    if (!expiring.length) return 0;
+    const own = new Set(recipes.map((r) => r.title.toLowerCase()));
+    const cookbook = [...catalogForDiets(catalogItems, diets), ...catalogItems.filter((c) => c.category === 'dessert' && c.image).map(catalogToRecipe)];
+    const pool = [...recipes, ...cookbook.filter((r) => !own.has(r.title.toLowerCase()))];
+    return pool.filter((recipe) => matchRecipe(recipe, pantry).usesExpiring > 0).length;
+  }, [recipes, catalogItems, diets, pantry, expiring.length]);
   const usedUp = (id: string) => { const item = markUsed(id); if (item) { haptic.success(); setRemoved(item); } };
   return (
     <KeyboardAvoidingView className="flex-1 bg-cream" testID="pantry-screen" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScreenHeader title="Kitchen" eyebrow={`${pantry.length} ITEMS · AT HOME`} right={<PressableScale testID="kitchen-scan" accessibilityRole="button" accessibilityLabel="Scan your fridge" onPress={() => router.push({ pathname: '/scan', params: { mode: 'fridge' } })}><View className="h-11 w-11 items-center justify-center rounded-full bg-ink"><Camera size={19} color={C.cream} /></View></PressableScale>} />
       <View className="px-5 pt-1">
-        <PressableScale testID="kitchen-expiring-recipes" accessibilityRole="button" accessibilityLabel="See recipes that use expiring items" onPress={() => router.navigate('/')}>
+        <PressableScale testID="kitchen-expiring-recipes" accessibilityRole="button" accessibilityLabel="See recipes that use expiring items" onPress={() => router.push(expiring.length ? { pathname: '/genie-chef', params: { use: expiring.map((e) => e.name).join('|') } } : '/genie-chef')}>
           <View className="mb-4 flex-row items-center rounded-t-[22px] rounded-br-[22px] bg-forest p-4" style={{ gap: 12 }}>
             <View className="h-10 w-10 items-center justify-center rounded-xl bg-honey"><Sparkles size={20} color={C.onHoney} /></View>
-            <View className="flex-1"><Txt display weight="bold" className="text-[17px] text-onGreen">{expiring.length ? `${expiring.length} things need using soon` : 'Your kitchen is looking fresh'}</Txt><Txt className="mt-0.5 text-[13px] text-onGreen">{usefulRecipes} recipes use them up</Txt></View>
+            <View className="flex-1"><Txt display weight="bold" className="text-[17px] text-onGreen">{expiring.length ? `${expiring.length} ${expiring.length === 1 ? 'thing needs' : 'things need'} using soon` : 'Your kitchen is looking fresh'}</Txt><Txt className="mt-0.5 text-[13px] text-onGreen">{expiring.length ? (usefulRecipes ? `${usefulRecipes} recipe${usefulRecipes === 1 ? '' : 's'} use${usefulRecipes === 1 ? 's' : ''} ${expiring.length === 1 ? 'it' : 'them'} up · tap for ideas` : 'Tap and FridgeGenie will use it up') : 'Tap for dinner ideas'}</Txt></View>
             <ChevronRight size={19} color={C.honey} />
           </View>
         </PressableScale>
