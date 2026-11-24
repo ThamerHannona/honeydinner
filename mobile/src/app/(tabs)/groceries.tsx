@@ -1,13 +1,15 @@
 import { useKitchenRefresh } from '@/lib/use-kitchen-refresh';
 import { useTheme } from '@/lib/theme-context';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, Share, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Check, MessageCircle, Plus, ShoppingBasket } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/app';
 import { PressableScale, Txt, HardShadow } from '@/components/ui';
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
-import { formatQty } from '@/lib/kitchen';
+import { formatQty, kitchenInsight } from '@/lib/kitchen';
+import { catalogForDiets, useCatalog } from '@/lib/catalog';
+import { Sparkles } from 'lucide-react-native';
 import { toast, useApp } from '@/lib/store';
 import { fonts, haptic, shape } from '@/lib/theme';
 import type { Aisle, Member } from '@/lib/types';
@@ -33,6 +35,15 @@ export default function GroceriesScreen() {
   const toggleGrocery = useApp((s) => s.toggleGrocery);
   // The existing manual-add store action also handles aisle guessing and duplicates.
   const addManualGrocery = useApp((s) => s.addGrocery);
+  const pantryAll = useApp((s) => s.pantry);
+  const dietsAll = useApp((s) => s.diets);
+  const catalogItems = useCatalog((s) => s.items);
+  // Empty list? FridgeGenie suggests the one buy that opens up the most dinners.
+  const suggestion = useMemo(() => {
+    if (groceries.some((g) => !g.checked)) return null;
+    const own = new Set(recipes.map((r) => r.title.toLowerCase()));
+    return kitchenInsight([...recipes, ...catalogForDiets(catalogItems, dietsAll).filter((r) => !own.has(r.title.toLowerCase()))], pantryAll, dietsAll);
+  }, [groceries, recipes, catalogItems, dietsAll, pantryAll]);
   const requestPickup = useApp((s) => s.requestPickup);
   const partnerInKitchen = useApp((s) => (s.household ? s.household.members.find((m) => m.memberId !== s.household?.memberId)?.name ?? null : null));
   const partnerName = members.find((m) => !m.isMe)?.name ?? partnerInKitchen;
@@ -86,7 +97,7 @@ export default function GroceriesScreen() {
           </PressableScale>
         } />
       </View>
-      {storeMode ? (
+      {storeMode && groceries.length > 0 ? (
         <View testID="groceries-store-mode" className="mx-5 mb-3 rounded-2xl px-4 py-3" style={{ backgroundColor: C.plateSage, borderWidth: 1, borderColor: C.leafDark }}>
           <Txt weight="extrabold" style={{ color: C.leafDark, fontSize: 14 }}>Shopping mode · {remaining} left</Txt>
           <Txt style={{ color: C.inkSoft, fontSize: 12, marginTop: 3 }}>Tick as you go. Checked items go into your kitchen.</Txt>
@@ -135,6 +146,20 @@ export default function GroceriesScreen() {
             <AnimatedFridgeGenie size={88} mood="idle" testID="groceries-empty-genie" />
             <Txt display weight="bold" style={{ fontSize: 27, marginTop: 12 }}>A little room on the list.</Txt>
             <Txt className="mt-2" style={{ color: C.inkSoft }}>Add an item above, or add missing ingredients from a recipe.</Txt>
+            {suggestion?.buy ? (
+              <View testID="groceries-genie-suggestion" className="mt-5 rounded-3xl p-4" style={{ backgroundColor: C.forest }}>
+                <View className="flex-row items-start" style={{ gap: 10 }}>
+                  <Sparkles size={18} color={C.honey} style={{ marginTop: 2 }} />
+                  <Txt weight="semibold" className="flex-1" style={{ color: C.onGreen, fontSize: 15 }}>{suggestion.text}</Txt>
+                </View>
+                <PressableScale testID="groceries-genie-add" accessibilityRole="button" accessibilityLabel={`Add ${suggestion.buy} to the list`} onPress={() => { haptic.success(); addManualGrocery(suggestion.buy!); }} className="mt-3 self-start">
+                  <View className="h-10 flex-row items-center rounded-full px-4" style={{ backgroundColor: C.honey, gap: 6 }}>
+                    <Plus size={16} color={C.ink} />
+                    <Txt weight="extrabold" style={{ fontSize: 14 }}>Add {suggestion.buy}</Txt>
+                  </View>
+                </PressableScale>
+              </View>
+            ) : null}
           </View>
         ) : remaining === 0 ? (
           <View testID="groceries-all-done" className="pb-5">
@@ -162,11 +187,13 @@ export default function GroceriesScreen() {
             ) : null}
           </View>
         ) : null}
+{groceries.length > 0 ? (
         <PressableScale testID={storeMode ? 'groceries-done-shopping' : 'groceries-start-shopping'} accessibilityRole="button" accessibilityLabel={storeMode ? 'Done shopping' : "I'm at the store"} onPress={() => { setStoreMode(!storeMode); Keyboard.dismiss(); if (storeMode) toast(quip.shoppingDone()); }}>
           <HardShadow color={C.honey} radius={999}><View className="items-center justify-center rounded-full" style={{ height: 57, backgroundColor: C.ink }}>
             <Txt weight="extrabold" style={{ fontSize: 16, color: C.cream }}>{storeMode ? 'Done shopping' : "I'm at the store"}</Txt>
           </View></HardShadow>
         </PressableScale>
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );

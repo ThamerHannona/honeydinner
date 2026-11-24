@@ -24,6 +24,9 @@ export function Txt({ weight = 'regular', display = false, label = false, italic
   const rtlStyle = rtl ? { writingDirection: 'rtl' as const, textAlign: flat?.textAlign === 'center' || className?.includes('text-center') ? ('center' as const) : ('right' as const) } : null;
   return <Text {...rest} className={cn('text-ink text-base', className)} style={[
     { fontFamily: display || isLabel ? font : Platform.OS === 'ios' ? 'System' : 'sans-serif', fontWeight: display || isLabel ? undefined : weight === 'regular' ? '400' : weight === 'semibold' ? '600' : '700' }, isLabel && { ...typography.badge }, style, rtlStyle,
+    // A size set in `style` keeps text-base's 24px line height unless we give it one, which clips tall
+    // serif letters (the tops of l, i, h) at bigger sizes. Give every custom size a line height that fits.
+    typeof flat?.fontSize === 'number' && flat.lineHeight == null && !className?.includes('leading-') && { lineHeight: Math.round(flat.fontSize * (display ? 1.2 : 1.32)) },
     // Use the real italic face rather than synthetic italic on serif headlines.
     display && isItalic && { fontFamily: fonts.displayItalic, fontStyle: 'normal' },
   ]} />;
