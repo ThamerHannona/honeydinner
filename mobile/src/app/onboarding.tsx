@@ -66,7 +66,7 @@ export default function Onboarding() {
   const [idea, setIdea] = useState<GenieIdea | null>(null);
   const [ideaSaved, setIdeaSaved] = useState<boolean>(false);
   const genie = useMutation({
-    mutationFn: () => askGenieForRecipes({ diets, pantry, servings: 2, avoid: recipes.map((r) => r.title), mood: 'easy weeknight', lang: lang === 'original' ? 'en' : lang }),
+    mutationFn: () => askGenieForRecipes({ diets, pantry, servings: 2, avoid: recipes.map((r) => r.title), mood: 'easy weeknight', lang: lang === 'original' ? 'en' : lang, onboarding: true }),
     onSuccess: (list) => { haptic.success(); setIdea(list[0] ?? null); useApp.getState().setGenieUsed(); },
     onError: () => toast('The genie is napping. Try again in a sec.'),
   });

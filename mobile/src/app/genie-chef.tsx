@@ -8,6 +8,7 @@ import { Check, ChefHat, Clock, Plus, RefreshCw, Sparkles, X } from 'lucide-reac
 import { AnimatedFridgeGenie } from '@/components/fridge-genie';
 import { Button, PressableScale, Txt } from '@/components/ui';
 import { goBack } from '@/lib/nav';
+import { openPaywall, PlusRequiredError } from '@/lib/plus';
 import { toast, useApp } from '@/lib/store';
 import { haptic, signature } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
@@ -71,7 +72,10 @@ export default function GenieChef() {
       useApp.getState().setGenieUsed();
       setSaved({});
     },
-    onError: (e: Error) => toast(e.message),
+    onError: (e: Error) => {
+      if (e instanceof PlusRequiredError) openPaywall('genie');
+      else toast(e.message);
+    },
   });
 
   useEffect(() => {

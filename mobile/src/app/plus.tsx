@@ -24,6 +24,7 @@ const SCRIPT = { fontFamily: 'CaveatBrush_400Regular', fontSize: 40, lineHeight:
 const FEATURES = [
   'Unlimited recipe imports from social posts, links, and photos',
   'Unlimited fridge and receipt scans',
+  'Unlimited FridgeGenie recipe ideas from what you have',
   'Voice-guided cook mode and step pictures, every time you cook',
 ];
 
@@ -31,8 +32,9 @@ const INTRO: Record<PaywallReason, string> = {
   gentle: 'That recipe landed. Plus keeps the imports, scans, and hands-free cooking coming.',
   import: "You've used this week's free imports. Plus unlocks as many as you want.",
   scan: "You've used this week's free fridge and receipt scans.",
+  genie: "You've used this week's 3 free FridgeGenie rounds. Plus lets the genie cook up as many as you want.",
   cook: "You've had one free cook with voice and step pictures. Plus keeps that going.",
-  profile: 'More imports, more scans, and hands-free cooking whenever you need it.',
+  profile: 'Unlimited imports, scans, FridgeGenie ideas, and hands-free cooking.',
 };
 
 export default function PlusPaywall() {
@@ -40,7 +42,7 @@ export default function PlusPaywall() {
   const insets = useSafeAreaInsets();
   const raw = useLocalSearchParams<{ reason?: string }>().reason;
   const reason: PaywallReason =
-    raw === 'import' || raw === 'scan' || raw === 'cook' || raw === 'gentle' ? raw : 'profile';
+    raw === 'import' || raw === 'scan' || raw === 'cook' || raw === 'genie' || raw === 'gentle' ? raw : 'profile';
   const isPlus = useApp((s) => s.isPlus);
   const [plans, setPlans] = useState<{ monthly: PlusPlan | null; yearly: PlusPlan | null }>({ monthly: null, yearly: null });
   const [picked, setPicked] = useState<'yearly' | 'monthly'>('yearly');

@@ -1,5 +1,5 @@
 import type { Diet, PantryItem, RecipeDraft } from '@/lib/types';
-import { plusHeaders } from '@/lib/plus';
+import { plusErrorFromResponse, plusHeaders } from '@/lib/plus';
 
 export interface GenieIdea {
   title: string;
@@ -43,11 +43,12 @@ const headers = () => {
 
 const daysLeft = (iso: string | null) => (iso ? Math.round((new Date(iso).getTime() - Date.now()) / 86400000) : null);
 
-export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryItem[]; servings: number; avoid: string[]; mood?: string; lang?: string }): Promise<GenieIdea[]> {
+export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryItem[]; servings: number; avoid: string[]; mood?: string; lang?: string; onboarding?: boolean }): Promise<GenieIdea[]> {
   const res = await fetch(`${base()}/functions/v1/genie-recipes`, {
     method: 'POST',
-    headers: headers(),
+    headers: plusHeaders(headers()),
     body: JSON.stringify({
+      onboarding: !!opts.onboarding,
       diets: opts.diets,
       servings: opts.servings,
       avoid: opts.avoid.slice(0, 50),
@@ -57,6 +58,8 @@ export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryIt
     }),
   });
   const json = (await res.json().catch(() => null)) as { recipes?: GenieIdea[]; error?: string } | null;
+  const plusErr = plusErrorFromResponse(res.status, json, 'genie');
+  if (plusErr) throw plusErr;
   if (!res.ok || !json?.recipes?.length) throw new Error(json?.error ?? 'FridgeGenie is stuck. Try again.');
   return json.recipes;
 }

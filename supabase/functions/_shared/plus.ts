@@ -10,9 +10,10 @@
 const RC_ENTITLEMENT = "plus";
 export const APP_USER_HEADER = "x-hd-app-user-id";
 
-export type Feature = "import" | "scan" | "cook";
+export type Feature = "import" | "scan" | "cook" | "genie";
 
-const LIMITS = { import: 3, scan: 2 } as const;
+const LIMITS = { import: 3, scan: 2, genie: 3 } as const;
+const COL = { import: "imports", scan: "scans", genie: "genies" } as const;
 
 export function weekPeriod(now = new Date()): string {
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -62,19 +63,23 @@ async function hasPlus(appUserId: string): Promise<boolean> {
   }
 }
 
-async function loadRow(appUserId: string, period: string): Promise<{ imports: number; scans: number; free_cook_recipe_id: string | null } | null> {
+type Row = { imports: number; scans: number; genies: number; free_cook_recipe_id: string | null };
+const EMPTY: Row = { imports: 0, scans: 0, genies: 0, free_cook_recipe_id: null };
+
+async function loadRow(appUserId: string, period: string): Promise<Row | null> {
   const h = serviceHeaders();
   const base = Deno.env.get("SUPABASE_URL");
   if (!h || !base) return null;
-  const url = `${base}/rest/v1/hd_usage?select=imports,scans,free_cook_recipe_id&app_user_id=eq.${encodeURIComponent(appUserId)}&period=eq.${encodeURIComponent(period)}&limit=1`;
+  const url = `${base}/rest/v1/hd_usage?select=imports,scans,genies,free_cook_recipe_id&app_user_id=eq.${encodeURIComponent(appUserId)}&period=eq.${encodeURIComponent(period)}&limit=1`;
   const res = await fetch(url, { headers: h });
   if (!res.ok) return null;
-  const rows = await res.json() as { imports?: number; scans?: number; free_cook_recipe_id?: string | null }[];
+  const rows = await res.json() as { imports?: number; scans?: number; genies?: number; free_cook_recipe_id?: string | null }[];
   const row = rows[0];
-  if (!row) return { imports: 0, scans: 0, free_cook_recipe_id: null };
+  if (!row) return { ...EMPTY };
   return {
     imports: Number(row.imports) || 0,
     scans: Number(row.scans) || 0,
+    genies: Number(row.genies) || 0,
     free_cook_recipe_id: row.free_cook_recipe_id ?? null,
   };
 }
@@ -96,6 +101,8 @@ export function plusRequiredPayload(feature: Feature, used?: number, limit?: num
       ? "Voice and step pictures are part of Honey, Dinner? Plus."
       : feature === "scan"
         ? "You've used this week's free fridge and receipt scans."
+        : feature === "genie"
+        ? "You've used this week's free FridgeGenie ideas."
         : "You've used this week's free imports.",
     code: "plus_required",
     feature,
@@ -125,7 +132,7 @@ export async function gateUsage(req: Request, feature: Feature, opts?: { recipeI
 
   if (feature === "cook") {
     const period = "lifetime";
-    const row = await loadRow(appUserId, period) ?? { imports: 0, scans: 0, free_cook_recipe_id: null };
+    const row = await loadRow(appUserId, period) ?? { ...EMPTY };
     const id = (recipeId ?? "").trim();
     if (row.free_cook_recipe_id && id && row.free_cook_recipe_id === id) return null;
     if (!row.free_cook_recipe_id) return null; // first full cook is free; consume after success
@@ -133,8 +140,8 @@ export async function gateUsage(req: Request, feature: Feature, opts?: { recipeI
   }
 
   const period = weekPeriod();
-  const row = await loadRow(appUserId, period) ?? { imports: 0, scans: 0, free_cook_recipe_id: null };
-  const used = feature === "scan" ? row.scans : row.imports;
+  const row = await loadRow(appUserId, period) ?? { ...EMPTY };
+  const used = row[COL[feature]];
   const limit = LIMITS[feature];
   if (used >= limit) return blocked(cors, feature, used, limit);
   return null;
@@ -150,19 +157,15 @@ export async function consumeUsage(req: Request, feature: Feature, opts?: { reci
     const id = (recipeId ?? "").trim();
     if (!id) return;
     const period = "lifetime";
-    const row = await loadRow(appUserId, period) ?? { imports: 0, scans: 0, free_cook_recipe_id: null };
+    const row = await loadRow(appUserId, period) ?? { ...EMPTY };
     if (row.free_cook_recipe_id) return;
     await upsert(appUserId, period, { free_cook_recipe_id: id, imports: row.imports, scans: row.scans });
     return;
   }
   const period = weekPeriod();
-  const row = await loadRow(appUserId, period) ?? { imports: 0, scans: 0, free_cook_recipe_id: null };
-  const used = feature === "scan" ? row.scans : row.imports;
+  const row = await loadRow(appUserId, period) ?? { ...EMPTY };
+  const used = row[COL[feature]];
   const limit = LIMITS[feature];
   if (used >= limit) return;
-  await upsert(appUserId, period, {
-    imports: feature === "import" ? used + 1 : row.imports,
-    scans: feature === "scan" ? used + 1 : row.scans,
-    free_cook_recipe_id: row.free_cook_recipe_id,
-  });
+  await upsert(appUserId, period, { [COL[feature]]: used + 1 });
 }

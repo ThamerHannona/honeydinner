@@ -7,16 +7,19 @@ export const PLUS_ENTITLEMENT = 'plus';
 export const PLUS_OFFERING_ID = 'honeydinner';
 export const FREE_IMPORTS_PER_WEEK = 3;
 export const FREE_SCANS_PER_WEEK = 2;
+export const FREE_GENIE_PER_WEEK = 3;
 export const PRIVACY_URL = 'https://shakeandbakelabs.com/honeydinner/privacy';
 export const TERMS_URL = 'https://shakeandbakelabs.com/honeydinner/terms';
 export const APP_USER_HEADER = 'x-hd-app-user-id';
 
-export type PaywallReason = 'import' | 'scan' | 'cook' | 'gentle' | 'profile';
+export type PaywallReason = 'import' | 'scan' | 'cook' | 'genie' | 'gentle' | 'profile';
+
+export type PlusFeature = 'import' | 'scan' | 'cook' | 'genie';
 
 export class PlusRequiredError extends Error {
   code = 'plus_required' as const;
-  feature: 'import' | 'scan' | 'cook';
-  constructor(feature: 'import' | 'scan' | 'cook', message?: string) {
+  feature: PlusFeature;
+  constructor(feature: PlusFeature, message?: string) {
     super(message ?? 'Honey, Dinner? Plus is needed for this.');
     this.name = 'PlusRequiredError';
     this.feature = feature;
@@ -37,10 +40,10 @@ export function plusHeaders(extra?: Record<string, string>): Record<string, stri
   return id ? { ...extra, [APP_USER_HEADER]: id } : { ...extra };
 }
 
-export function plusErrorFromResponse(status: number, body: unknown, fallback: 'import' | 'scan' | 'cook'): PlusRequiredError | null {
+export function plusErrorFromResponse(status: number, body: unknown, fallback: PlusFeature): PlusRequiredError | null {
   if (status !== 402) return null;
   const d = body && typeof body === 'object' ? (body as { code?: string; feature?: string; error?: string }) : {};
-  const feature = d.feature === 'import' || d.feature === 'scan' || d.feature === 'cook' ? d.feature : fallback;
+  const feature = d.feature === 'import' || d.feature === 'scan' || d.feature === 'cook' || d.feature === 'genie' ? d.feature : fallback;
   return new PlusRequiredError(feature, d.error);
 }
 

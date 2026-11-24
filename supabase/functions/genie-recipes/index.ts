@@ -11,10 +11,13 @@
 // }
 // → { recipes: [{ title, blurb, servings, cookTime, ingredients:[{name,qty,unit,have}], steps:[], uses:[], tags:[] }] }
 // Secrets: OPENAI_API_KEY.
+// Free users: 3 rounds a week (onboarding demo is free). Plus: unlimited.
+
+import { consumeUsage, gateUsage } from "../_shared/plus.ts";
 
 const cors: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-hd-app-user-id",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 const json = (d: unknown, status = 200) =>
@@ -52,6 +55,11 @@ Deno.serve(async (req) => {
     const key = Deno.env.get("OPENAI_API_KEY");
     if (!key) return json({ error: "Not configured" }, 500);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const onboarding = body.onboarding === true;
+    if (!onboarding) {
+      const gate = await gateUsage(req, "genie", { cors });
+      if (gate) return gate;
+    }
 
     const diets = (Array.isArray(body.diets) ? body.diets : []).map((d) => clean(d, 30).toLowerCase()).filter((d) => DIET_RULES[d]);
     const pantry = (Array.isArray(body.pantry) ? body.pantry : []).slice(0, 120).map((p: any) => ({
@@ -140,6 +148,7 @@ Deno.serve(async (req) => {
 
     if (!recipes.length) return json({ error: "FridgeGenie couldn't think of anything. Add a few items and try again." }, 422);
     console.log("[genie-recipes] ok", diets.join(",") || "none", lang, pantry.length, "items →", recipes.map((r: any) => r.title).join(" | "));
+    if (!onboarding) await consumeUsage(req, "genie").catch(() => {});
     return json({ recipes });
   } catch (e) {
     console.log("[genie-recipes] error", String(e));
