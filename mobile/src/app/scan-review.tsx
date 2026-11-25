@@ -1,6 +1,6 @@
 import { goBack } from '@/lib/nav';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { TextInput, View, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import Animated, { FadeInDown, FadeOut, LinearTransition, useReducedMotion } fro
 import { Plus, Trash2 } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { Button, PressableScale, Txt, GenieBubble } from '@/components/ui';
-import { guessEmoji } from '@/lib/kitchen';
+import { guessEmoji, kitchenGaps } from '@/lib/kitchen';
 import { toast, useApp } from '@/lib/store';
 import { haptic, fonts } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
@@ -25,6 +25,13 @@ export default function ScanReview() {
   const addDetectedItems = useApp((s) => s.addDetectedItems);
   const [items, setItems] = useState<DetectedItem[]>(draft);
   const insets = useSafeAreaInsets();
+  const pantry = useApp((s) => s.pantry);
+  const diets = useApp((s) => s.diets);
+  const groceries = useApp((s) => s.groceries);
+  const addGrocery = useApp((s) => s.addGrocery);
+  // After the scan, check the whole kitchen (what's already there + this scan) for dinner gaps.
+  const gaps = useMemo(() => kitchenGaps([...pantry, ...items.filter((i) => i.name.trim())], diets), [pantry, items, diets]);
+  const onList = (n: string) => groceries.some((g) => !g.checked && g.name.toLowerCase() === n.toLowerCase());
 
   const update = (id: string, p: Partial<DetectedItem>) => setItems((cur) => cur.map((i) => (i.id === id ? { ...i, ...p } : i)));
   const valid = items.filter((i) => i.name.trim());
@@ -47,7 +54,22 @@ export default function ScanReview() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1" testID="scan-review-screen" style={{ backgroundColor: C.cream }}>
       <SheetHeader title={`${items.length} items`} subtitle="Edit anything before adding." />
       <KeyboardAwareScrollView bottomOffset={16} testID="scan-review-form" style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}>
-        <GenieBubble testID="scan-review-note" text="Keep only what’s really in your kitchen." />
+        <GenieBubble testID="scan-review-note" text={gaps.length ? `Heads up: for a full dinner you're missing ${gaps.map((g) => g.label).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Did I miss something in the photo? Add it below.` : 'Keep only what’s really in your kitchen. Missing something? Add it below.'} />
+        {gaps.length ? (
+          <View className="mt-3 flex-row flex-wrap" style={{ gap: 8 }} testID="scan-review-gaps">
+            {gaps.map((g) => {
+              const listed = onList(g.buy);
+              return (
+                <PressableScale key={g.key} testID={`scan-gap-${g.key}`} accessibilityRole="button" accessibilityLabel={`Add ${g.buy} to the shopping list`} onPress={() => { if (listed) return; haptic.success(); addGrocery(g.buy); toast(`Added ${g.buy} to the list`); }}>
+                  <View className="h-10 flex-row items-center rounded-full px-3.5" style={{ gap: 6, backgroundColor: listed ? C.plateSage : C.honey, borderWidth: 1.5, borderColor: C.ink }}>
+                    <Plus size={15} color={C.ink} />
+                    <Txt weight="extrabold" style={{ fontSize: 13 }}>{listed ? `${g.buy} on the list ✓` : `List: ${g.buy}`}</Txt>
+                  </View>
+                </PressableScale>
+              );
+            })}
+          </View>
+        ) : null}
         <View className="mt-4" style={{ gap: 8 }}>
           {items.map((it, idx) => (
             <Animated.View key={it.id} entering={reduceMotion ? undefined : FadeInDown.delay(idx * 40)} exiting={reduceMotion ? undefined : FadeOut} layout={reduceMotion ? undefined : LinearTransition}>

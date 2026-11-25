@@ -32,10 +32,19 @@ const PROMPT: Record<string, string> = {
     "- expiresInDays: typical unopened shelf life (milk 7, chicken 2, berries 4, eggs 28, frozen 180); null for things that don't really expire.\n" +
     "- If a line is truly unreadable, skip it rather than guessing a random product.",
   fridge:
-    "Identify the edible food items visibly in this fridge, freezer, or kitchen photo. " +
-    "Return JSON {\"items\":[{\"name\":\"item name\",\"quantity\":\"best estimate or 1\",\"location\":\"fridge|freezer|pantry\",\"expiresInDays\":number|null}]}. " +
-    "Estimate remaining freshness in days from what you see; null if it does not really expire. " +
-    "Skip unidentifiable containers and non-food objects. Do not invent a full fridge of items you cannot see.",
+    "You are taking inventory of a fridge, freezer, pantry shelf or kitchen counter for a cooking app. Be thorough: the user wants EVERYTHING that is there, because missed items mean worse dinner ideas.\n" +
+    "You may get ONE photo, or the WHOLE photo first followed by zoomed-in sections of the same photo (they overlap). Use the zoomed sections to read small items and labels, but count every physical item ONCE.\n" +
+    "Work in two passes and return JSON {\"zones\":[{\"zone\":\"e.g. top shelf, door shelf 2, crisper drawer\",\"seen\":[\"what you see there\"]}],\"items\":[{\"name\":\"everyday grocery name\",\"quantity\":\"count or amount, e.g. 6, 1 carton, half a bag\",\"location\":\"fridge|freezer|pantry\",\"expiresInDays\":number|null,\"confidence\":\"high|medium\"}]}.\n" +
+    "Pass 1 (zones): scan zone by zone: every shelf top to bottom, left to right, then each door shelf, then drawers/crispers, then anything on top or on the counter. List everything you can see in each zone, including partly hidden items, drinks, condiments, sauces, jars, deli packs, leftovers and produce behind glass drawers.\n" +
+    "Pass 2 (items): turn pass 1 into a clean list.\n" +
+    "Rules:\n" +
+    "- Read labels and packaging: name the actual food in plain words ('Chobani' → Greek yogurt, 'Kerrygold' → butter, 'Sriracha' → sriracha sauce). Drop brand names.\n" +
+    "- Be specific when you can tell (chicken breasts, ground beef, cheddar cheese, baby spinach, bell peppers, strawberries), generic when you can't (cheese, lunch meat, leftovers in container).\n" +
+    "- Include proteins (meat, fish, eggs, tofu, deli meat), dairy, produce, herbs, condiments, sauces, dressings, drinks like milk and juice, bread, tortillas and leftovers. Skip non-food and anything you truly cannot identify.\n" +
+    "- Count repeated items (6 eggs visible in a tray → 6; three yogurt cups → 3). Merge duplicates.\n" +
+    "- confidence: high when clearly visible, medium when partly hidden but likely. Leave out pure guesses.\n" +
+    "- location: where this photo is (fridge unless it's clearly a freezer or a pantry shelf).\n" +
+    "- expiresInDays: estimate from what you see (fresh herbs 4, berries 3, opened milk 5, raw chicken 2, eggs 21, condiments 90); null for things that don't really expire.",
 };
 
 function dataUrl(image: string): string | null {
@@ -52,7 +61,7 @@ function parseItems(raw: unknown, fallbackLoc: string): { name: string; quantity
   const list = Array.isArray(raw) ? raw : (raw as { items?: unknown })?.items;
   if (!Array.isArray(list)) return [];
   const out = [];
-  for (const row of list.slice(0, 80)) {
+  for (const row of list.slice(0, 120)) {
     const r = row as Record<string, unknown>;
     const name = String(r?.name ?? "").trim().slice(0, 80);
     if (!name) continue;
@@ -66,7 +75,7 @@ function parseItems(raw: unknown, fallbackLoc: string): { name: string; quantity
   return out;
 }
 
-async function readImage(key: string, prompt: string, urls: string[], models: string[]): Promise<unknown> {
+async function readImage(key: string, prompt: string, urls: string[], models: string[], mode = "receipt"): Promise<unknown> {
   for (const model of models) {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -78,7 +87,7 @@ async function readImage(key: string, prompt: string, urls: string[], models: st
         messages: [{
           role: "user",
           content: [
-            { type: "text", text: urls.length > 1 ? `${prompt}\n\nThere are ${urls.length} sections below, in order from the top of the receipt to the bottom.` : prompt },
+            { type: "text", text: urls.length > 1 ? `${prompt}\n\n${mode === "fridge" ? `Image 1 is the whole photo; images 2-${urls.length} are zoomed-in, overlapping sections of it.` : `There are ${urls.length} sections below, in order from the top of the receipt to the bottom.`}` : prompt },
             ...urls.map((url) => ({ type: "image_url", image_url: { url, detail: "high" } })),
           ],
         }],
@@ -104,16 +113,19 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null) as { mode?: unknown; image?: unknown; images?: unknown } | null;
     const mode = String(body?.mode ?? "") === "fridge" ? "fridge" : String(body?.mode ?? "") === "receipt" ? "receipt" : "";
     if (!mode) return json({ error: "Missing mode" }, 400);
-    const rawImages = Array.isArray((body as { images?: unknown })?.images) ? ((body as { images: unknown[] }).images).slice(0, 5) : [body?.image];
-    const urls = rawImages.map((i) => dataUrl(String(i ?? ""))).filter((u): u is string => !!u);
+    const rawImages = Array.isArray((body as { images?: unknown })?.images) ? ((body as { images: unknown[] }).images).slice(0, 6) : [body?.image];
+    const urls = rawImages.map((i) => {
+      const v = String(i ?? "").trim();
+      return /^https:\/\/\S+$/i.test(v) ? v : dataUrl(v);
+    }).filter((u): u is string => !!u);
     if (!urls.length) return json({ error: "Missing image" }, 400);
 
     const blocked = await gateUsage(req, "scan", { cors });
     if (blocked) return blocked;
 
     // Receipts are dense small print: lead with the strongest vision models.
-    const models = mode === "receipt" ? ["gpt-4.1", "gpt-4o", "gpt-4o-mini"] : ["gpt-4o", "gpt-4o-mini"];
-    const parsed = await readImage(key, PROMPT[mode], urls, models);
+    const models = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"];
+    const parsed = await readImage(key, PROMPT[mode], urls, models, mode);
     const lineCount = Array.isArray((parsed as { lines?: unknown[] } | null)?.lines) ? (parsed as { lines: unknown[] }).lines.length : 0;
     console.log("[scan-kitchen]", mode, `${urls.length} image(s)`, `${lineCount} lines`);
     if (!parsed) return json({ error: "Couldn't read that photo" }, 502);

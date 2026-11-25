@@ -223,7 +223,7 @@ function itemsFromResponse(raw: unknown, fallback: DetectedItem['location']): De
   if (!Array.isArray(list)) return [];
   const locs: DetectedItem['location'][] = ['fridge', 'freezer', 'pantry'];
   const out: DetectedItem[] = [];
-  for (const row of list.slice(0, 40)) {
+  for (const row of list.slice(0, 100)) {
     const r = row as Record<string, unknown>;
     const name = String(r?.name ?? '').trim();
     if (!name) continue;
@@ -274,15 +274,41 @@ async function receiptSections(photo: ScanPhoto): Promise<string[] | null> {
   }
 }
 
+/**
+ * A fridge photo shrunk to ~768px loses jars, yogurts and drawer produce. Send the whole
+ * photo plus four overlapping zoomed-in quarters so small items and labels stay readable.
+ */
+async function fridgeSections(photo: ScanPhoto): Promise<string[] | null> {
+  if (!photo.uri) return null;
+  try {
+    const IM = await import('expo-image-manipulator');
+    const base = await IM.manipulateAsync(photo.uri, [{ resize: { width: 2400 } }], { compress: 1, format: IM.SaveFormat.JPEG });
+    const { width: w, height: h } = base;
+    if (!w || !h) return null;
+    const whole = await IM.manipulateAsync(base.uri, [{ resize: { width: 1600 } }], { compress: 0.85, format: IM.SaveFormat.JPEG, base64: true });
+    const out: string[] = whole.base64 ? [whole.base64] : [];
+    const cw = Math.round(w * 0.6);
+    const ch = Math.round(h * 0.6);
+    for (const [fx, fy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      const crop = { originX: fx ? w - cw : 0, originY: fy ? h - ch : 0, width: cw, height: ch };
+      const part = await IM.manipulateAsync(base.uri, [{ crop }, { resize: { width: 1200 } }], { compress: 0.85, format: IM.SaveFormat.JPEG, base64: true });
+      if (part.base64) out.push(part.base64);
+    }
+    return out.length > 1 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 async function scanWithVision(mode: 'receipt' | 'fridge', photo: ScanPhoto): Promise<DetectedItem[]> {
-  const sections = mode === 'receipt' ? await receiptSections(photo) : null;
+  const sections = mode === 'receipt' ? await receiptSections(photo) : await fridgeSections(photo);
   const image = sections ? sections[0] : await readBase64(photo);
   if (!image) throw new Error('No photo');
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   if (!base || !anon) throw new Error('Not configured');
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 75000);
+  const timer = setTimeout(() => ctrl.abort(), 110000);
   try {
     const res = await fetch(`${base.replace(/\/+$/, '')}/functions/v1/scan-kitchen`, {
       method: 'POST',

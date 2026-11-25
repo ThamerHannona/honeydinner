@@ -386,3 +386,32 @@ export const findTimerMinutes = (step: string): number | null => {
   if (h) return Number(h[1]) * 60;
   return null;
 };
+
+
+export interface KitchenGap {
+  key: 'protein' | 'veg' | 'carb' | 'aromatic';
+  label: string;
+  /** What to suggest adding. */
+  buy: string;
+}
+
+const VEG_RE = /\b(spinach|lettuce|romaine|kale|arugula|broccoli|cauliflower|carrot|pepper|zucchini|squash|cucumber|tomato|mushroom|green bean|pea|asparagus|cabbage|celery|eggplant|corn|brussels|bok choy|greens|salad)\b/;
+const CARB_RE = /\b(rice|pasta|spaghetti|penne|noodle|bread|tortilla|potato|quinoa|couscous|bulgur|oat|bun|pita|naan|bagel|gnocchi)\b/;
+const AROMATIC_RE = /\b(onion|garlic|shallot|scallion|leek|ginger)\b/;
+
+/**
+ * What a kitchen is missing to make a proper dinner: a main protein, a vegetable, a carb, onion/garlic.
+ * Used after a scan ("no protein in here") and anywhere we want to nudge a shopping trip.
+ */
+export function kitchenGaps(pantry: { name: string }[], diets: string[] = []): KitchenGap[] {
+  const names = pantry.map((p) => p.name.toLowerCase());
+  const has = (re: RegExp) => names.some((n) => re.test(n) || re.test(normalizeName(n)));
+  const plant = diets.some((d) => d === 'vegan' || d === 'plant-based' || d === 'vegetarian');
+  const lowCarb = diets.some((d) => ['keto', 'carnivore', 'atkins', 'low-carb', 'paleo', 'whole30'].includes(d));
+  const gaps: KitchenGap[] = [];
+  if (!pantry.some((p) => isProtein(p.name))) gaps.push({ key: 'protein', label: 'a protein', buy: plant ? 'tofu' : diets.includes('pescatarian') ? 'salmon' : 'chicken thighs' });
+  if (!diets.includes('carnivore') && !has(VEG_RE)) gaps.push({ key: 'veg', label: 'a vegetable', buy: 'broccoli' });
+  if (!lowCarb && !has(CARB_RE)) gaps.push({ key: 'carb', label: 'a carb like rice or pasta', buy: 'rice' });
+  if (!diets.includes('carnivore') && !has(AROMATIC_RE)) gaps.push({ key: 'aromatic', label: 'onion or garlic', buy: 'onions' });
+  return gaps;
+}
