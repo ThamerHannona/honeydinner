@@ -61,6 +61,8 @@ What makes a great entry:
 - Real technique with a reason it works: the step that makes it taste great (blooming spices, browning hard, deglazing, resting meat, finishing with acid/herbs).
 - Titles: the dish name people would recognize, optionally with a short clarifier. Never prefix with a cuisine adjective like "Mediterranean ..." or "Asian-style ..." unless it is part of the dish's real name. No diet words in titles (no "Keto", "Paleo", "Vegan" prefixes).
 - Must be clearly different from EVERY title already in the cookbook (any chapter), including near-duplicates (a different protein on the same formula counts as a duplicate): ${ex.all.join("; ") || "(none yet)"}.
+- Honest names: if the rules force you to drop a dish's defining ingredients, don't borrow that dish's name; name it for what it actually is.
+- Every single ingredient must follow the rules above. Check each one before answering.
 - Write everything in your own words.`
       : `Create ${count} different, popular, home-cookable ${category === "dessert" ? "dessert" : "dinner"} recipes for this category.
 ${rule}

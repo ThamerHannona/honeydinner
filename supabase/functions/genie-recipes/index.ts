@@ -70,6 +70,24 @@ Deno.serve(async (req) => {
     const servings = Math.min(12, Math.max(1, Math.round(Number(body.servings) || 2)));
     const avoid = (Array.isArray(body.avoid) ? body.avoid : []).slice(0, 60).map((t) => clean(t, 80)).filter(Boolean);
     const mood = clean(body.mood, 140);
+    // Cook-with picks, spoken/typed request and macro targets (all optional)
+    const must = (Array.isArray(body.must) ? body.must : []).slice(0, 20).map((t) => clean(t, 60)).filter(Boolean);
+    const onlyThese = body.only === true && must.length > 0;
+    const request = clean(body.request, 400);
+    const m = (body.macros ?? {}) as Record<string, unknown>;
+    const num = (v: unknown, lo: number, hi: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+    const macros = {
+      proteinMin: num(m.proteinMin, 5, 200),
+      carbsMax: num(m.carbsMax, 0, 300),
+      caloriesMax: num(m.caloriesMax, 150, 2500),
+      fatMax: num(m.fatMax, 0, 200),
+    };
+    const macroRules = [
+      macros.proteinMin !== null ? `at least ${macros.proteinMin} g protein` : "",
+      macros.carbsMax !== null ? `no more than ${macros.carbsMax} g carbs` : "",
+      macros.caloriesMax !== null ? `no more than ${macros.caloriesMax} calories` : "",
+      macros.fatMax !== null ? `no more than ${macros.fatMax} g fat` : "",
+    ].filter(Boolean);
     const lang = ["en", "ar", "es", "original"].includes(String(body.lang)) ? String(body.lang) : "en";
     const LANG_RULE: Record<string, string> = {
       ar: "Write title, blurb, tags, ingredient names and steps in clear, simple Arabic. Keep units as short Latin abbreviations (g, cup, tbsp) and quantities as numbers.",
@@ -81,7 +99,7 @@ Deno.serve(async (req) => {
 
     const system =
       "You are FridgeGenie, a warm, practical home-cooking assistant. You invent realistic weeknight dinners that a normal home cook can make tonight.\n" +
-      "Return ONLY JSON: {\"recipes\":[{\"title\":string,\"blurb\":string,\"servings\":number,\"cookTime\":number,\"tags\":[string],\"uses\":[string],\"ingredients\":[{\"name\":string,\"qty\":number|null,\"unit\":string,\"have\":boolean}],\"steps\":[string]}]}\n" +
+      "Return ONLY JSON: {\"recipes\":[{\"title\":string,\"blurb\":string,\"servings\":number,\"cookTime\":number,\"tags\":[string],\"uses\":[string],\"macros\":{\"calories\":number,\"protein\":number,\"carbs\":number,\"fat\":number},\"ingredients\":[{\"name\":string,\"qty\":number|null,\"unit\":string,\"have\":boolean}],\"steps\":[string]}]}\n" +
       "Rules:\n" +
       "- Make exactly 4 different dinners (different proteins/cuisines/techniques).\n" +
       "- Build each mainly from the kitchen inventory. Prioritise items marked 'use within'. Assume basics are available: salt, pepper, water, cooking oil (unless the diet forbids it), common dried spices.\n" +
@@ -91,6 +109,8 @@ Deno.serve(async (req) => {
       "- title: appetising dish name in Title Case. blurb: one short sentence on why it's a good pick tonight (mention what it uses up).\n" +
       "- ingredients: qty as a number (0.5 not 1/2) or null; unit short (g, kg, ml, cup, tbsp, tsp, oz, lb, clove, can, pinch) or \"\" for whole items. Scale to the servings requested.\n" +
       "- steps: 5–9 short imperative steps, one action each, with times and heat levels.\n" +
+      "- macros: honest per-serving estimate (kcal and grams) from the ingredient amounts you list. If macro targets are given, every recipe MUST hit them per serving: size the protein portion, swap starches, and adjust fats until it does, then estimate truthfully.\n" +
+      "- If the cook picked specific ingredients, build every dinner around them. If the request text says what they want (an ingredient, a flavor, a cuisine, a time limit), follow it.\n" +
       "- uses: names of inventory items the recipe uses. tags: 1–3 short labels like the diet, 'One pan', '20 min'.\n" +
       "- Never repeat a dish from the 'avoid' list.\n" +
       "- Kitchen items may be named in English, Arabic or Spanish — treat them as the same foods.";
@@ -99,6 +119,11 @@ Deno.serve(async (req) => {
       `Servings: ${servings}`,
       `Eating style: ${diets.length ? diets.map((d) => DIET_RULES[d]).join(" ") : "No restrictions — balanced, family-friendly."}`,
       mood ? `They're in the mood for: ${mood}` : "",
+      request ? `What they asked FridgeGenie (in their words): "${request}"` : "",
+      must.length ? (onlyThese
+        ? `Use ONLY these ingredients plus basics (salt, pepper, oil, water, common dried spices): ${must.join(", ")}. Every recipe must use most of them.`
+        : `Build every dinner around these ingredients they picked: ${must.join(", ")}. Other kitchen items are fine too.`) : "",
+      macroRules.length ? `Macro targets per serving: ${macroRules.join(", ")}.` : "",
       `FRIDGE: ${byLoc("fridge")}`,
       `FREEZER: ${byLoc("freezer")}`,
       `PANTRY: ${byLoc("pantry")}`,
@@ -107,7 +132,8 @@ Deno.serve(async (req) => {
     ].filter(Boolean).join("\n");
 
     let parsed: any = null;
-    for (const model of ["gpt-4.1-mini", "gpt-4o-mini"]) {
+    // Macro math needs the stronger model; plain ideas are fine on mini.
+    for (const model of macroRules.length ? ["gpt-4.1", "gpt-4.1-mini"] : ["gpt-4.1-mini", "gpt-4o-mini"]) {
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
@@ -136,6 +162,12 @@ Deno.serve(async (req) => {
       servings: Math.max(1, Math.round(Number(r?.servings) || servings)),
       cookTime: Math.max(5, Math.min(240, Math.round(Number(r?.cookTime) || 30))),
       tags: (Array.isArray(r?.tags) ? r.tags : []).slice(0, 3).map((t: unknown) => clean(t, 24)).filter(Boolean),
+      macros: r?.macros && typeof r.macros === "object" ? {
+        calories: num(r.macros.calories, 0, 4000) ?? 0,
+        protein: num(r.macros.protein, 0, 400) ?? 0,
+        carbs: num(r.macros.carbs, 0, 600) ?? 0,
+        fat: num(r.macros.fat, 0, 400) ?? 0,
+      } : null,
       uses: (Array.isArray(r?.uses) ? r.uses : []).slice(0, 12).map((t: unknown) => clean(t, 60)).filter(Boolean),
       ingredients: (Array.isArray(r?.ingredients) ? r.ingredients : []).slice(0, 25).map((i: any) => ({
         name: clean(i?.name, 60),

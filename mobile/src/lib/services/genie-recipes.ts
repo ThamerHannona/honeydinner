@@ -8,6 +8,8 @@ export interface GenieIdea {
   cookTime: number;
   tags: string[];
   uses: string[];
+  /** Per-serving estimate from FridgeGenie. */
+  macros?: { calories: number; protein: number; carbs: number; fat: number } | null;
   ingredients: { name: string; qty: number | null; unit: string; have: boolean }[];
   steps: string[];
 }
@@ -43,12 +45,16 @@ const headers = () => {
 
 const daysLeft = (iso: string | null) => (iso ? Math.round((new Date(iso).getTime() - Date.now()) / 86400000) : null);
 
-export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryItem[]; servings: number; avoid: string[]; mood?: string; lang?: string; onboarding?: boolean }): Promise<GenieIdea[]> {
+export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryItem[]; servings: number; avoid: string[]; mood?: string; lang?: string; onboarding?: boolean; must?: string[]; only?: boolean; request?: string; macros?: { proteinMin?: number; carbsMax?: number; caloriesMax?: number; fatMax?: number } }): Promise<GenieIdea[]> {
   const res = await fetch(`${base()}/functions/v1/genie-recipes`, {
     method: 'POST',
     headers: plusHeaders(headers()),
     body: JSON.stringify({
       onboarding: !!opts.onboarding,
+      must: opts.must ?? [],
+      only: !!opts.only,
+      request: opts.request ?? '',
+      macros: opts.macros ?? {},
       diets: opts.diets,
       servings: opts.servings,
       avoid: opts.avoid.slice(0, 50),
@@ -75,7 +81,7 @@ export function ideaToDraft(idea: GenieIdea): RecipeDraft {
     ingredients: idea.ingredients.map(({ name, qty, unit }) => ({ name, qty, unit })),
     steps: idea.steps,
     source: { platform: 'genie', url: null, creator: 'FridgeGenie' },
-    note: idea.blurb,
+    note: idea.macros && idea.macros.calories ? `${idea.blurb} Per serving (est.): ${idea.macros.calories} cal · ${idea.macros.protein}g protein · ${idea.macros.carbs}g carbs · ${idea.macros.fat}g fat.` : idea.blurb,
   };
 }
 

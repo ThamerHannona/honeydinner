@@ -17,6 +17,9 @@ import type { Diet } from '@/lib/types';
 import { kitchenInsight, pantryHas, matchRecipe } from '@/lib/kitchen';
 import { RecipeImage } from '@/components/recipe-image';
 import { catalogForDiets, useCatalog } from '@/lib/catalog';
+import { CookWithPicker, MacroPicker, MacroRow, TalkButton, macroSummary } from '@/components/genie-builder';
+import { parseMacros, sayAloud, stopSpeaking, useDictation, type MacroTargets } from '@/lib/use-dictation';
+import { namesMatch } from '@/lib/kitchen';
 
 const MOODS = ['Quick', 'Comfort food', 'Light', 'Something new'] as const;
 const THINKING = [
@@ -37,6 +40,10 @@ export default function GenieChef() {
   const saveRecipe = useApp((s) => s.saveRecipe);
   const updateRecipe = useApp((s) => s.updateRecipe);
   const [mood, setMood] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [onlyThese, setOnlyThese] = useState<boolean>(false);
+  const [macros, setMacros] = useState<MacroTargets>({});
+  const [request, setRequest] = useState<string>('');
   const [ideas, setIdeas] = useState<GenieIdea[]>([]);
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [thinking, setThinking] = useState<number>(0);
@@ -68,8 +75,9 @@ export default function GenieChef() {
     pantry: pantry.filter((p) => p.location === 'pantry').length,
   }), [pantry]);
 
+  type AskVars = { request?: string; picked?: string[]; macros?: MacroTargets; voice?: boolean };
   const ask = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars?: AskVars) =>
       askGenieForRecipes({
         diets,
         pantry,
@@ -77,13 +85,23 @@ export default function GenieChef() {
         avoid: [...recipes.map((r) => r.title), ...ideas.map((i) => i.title)],
         mood: [useUp.length ? `MUST use up these before they spoil: ${useUp.join(', ')}` : '', mood ?? ''].filter(Boolean).join('. ') || undefined,
         lang: useApp.getState().recipeLanguage,
+        must: vars?.picked ?? picked,
+        only: onlyThese,
+        request: vars?.request ?? request,
+        macros: vars?.macros ?? macros,
       }),
-    onSuccess: (list) => {
+    onSuccess: (list, vars) => {
       haptic.success();
       setIdeas(list);
       setIdeasFor(pantryKey);
       useApp.getState().setGenieUsed();
       setSaved({});
+      if (vars?.voice && list[0]) {
+        const top = list[0];
+        const m = top.macros && top.macros.calories ? ` About ${top.macros.calories} calories and ${top.macros.protein} grams of protein a serving.` : '';
+        const need = top.ingredients.filter((x) => !x.have && !pantryHas(pantry, x.name)).map((x) => x.name);
+        sayAloud(`I've got ${list.length} ideas. My top pick is ${top.title}, ready in ${top.cookTime} minutes.${m} ${need.length ? `You'd just need ${need.slice(0, 3).join(', ')}.` : 'You have everything for it.'}`);
+      }
     },
     onError: (e: Error) => {
       if (e instanceof PlusRequiredError) openPaywall('genie');
@@ -91,8 +109,24 @@ export default function GenieChef() {
     },
   });
 
+  // Talk to FridgeGenie: understand the ingredients and macro targets in what was said, then cook up ideas.
+  const dictation = useDictation((text) => {
+    const said = text.toLowerCase();
+    const mentioned = pantry.map((p) => p.name).filter((n) => {
+      const core = n.toLowerCase();
+      return said.includes(core) || core.split(' ').some((w) => w.length > 3 && said.includes(w) && namesMatch(n, w));
+    });
+    const nextPicked = Array.from(new Set([...picked, ...mentioned]));
+    const nextMacros = { ...macros, ...parseMacros(text) };
+    setRequest(text);
+    setPicked(nextPicked);
+    setMacros(nextMacros);
+    ask.mutate({ request: text, picked: nextPicked, macros: nextMacros, voice: true });
+  });
+  useEffect(() => () => stopSpeaking(), []);
+
   useEffect(() => {
-    if (useUp.length && !ideas.length && !ask.isPending) ask.mutate();
+    if (useUp.length && !ideas.length && !ask.isPending) ask.mutate(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useUp.join('|')]);
 
@@ -147,6 +181,14 @@ export default function GenieChef() {
             </Txt>
           </View>
         </View>
+
+        <TalkButton listening={dictation.listening} partial={dictation.partial} onStart={() => void dictation.start().then((ok) => { if (!ok) toast('Turn on the microphone for Honey, Dinner? in Settings to talk to FridgeGenie.'); })} onStop={dictation.stop} />
+        {request && !dictation.listening ? (
+          <View className="mx-5 mt-2 flex-row items-center rounded-2xl px-3 py-2" style={{ backgroundColor: C.paper, gap: 8 }} testID="genie-request">
+            <Txt weight="semibold" className="flex-1 text-[13px]" style={{ color: C.inkSoft }} numberOfLines={2}>You said: “{request}”</Txt>
+            <PressableScale testID="genie-request-clear" accessibilityRole="button" accessibilityLabel="Clear request" onPress={() => setRequest('')}><X size={16} color={C.inkSoft} /></PressableScale>
+          </View>
+        ) : null}
 
         {useUp.length ? (
           <View testID="genie-use-up" className="mx-5 mt-6 rounded-[22px] p-4" style={{ backgroundColor: C.paper, borderWidth: 1.5, borderColor: C.ink }}>
@@ -227,6 +269,9 @@ export default function GenieChef() {
           </View>
         ) : null}
 
+        <CookWithPicker pantry={pantry} picked={picked} onChange={setPicked} only={onlyThese} onOnly={setOnlyThese} />
+        <MacroPicker value={macros} onChange={setMacros} />
+
         {/* eating style */}
         <View className="mt-7 px-5">
           <Txt label weight="extrabold" className="mb-3 text-[13px] uppercase tracking-widest" style={{ color: C.inkSoft }}>Your eating style</Txt>
@@ -265,8 +310,8 @@ export default function GenieChef() {
               variant="primary"
               loading={ask.isPending}
               icon={ideas.length ? <RefreshCw size={18} color={C.cream} /> : <Sparkles size={18} color={C.cream} />}
-              label={ask.isPending ? THINKING[thinking] : ideas.length ? 'Show me different ideas' : `Make me dinner · ${dietLabel}`}
-              onPress={() => ask.mutate()}
+              label={ask.isPending ? THINKING[thinking] : ideas.length ? 'Show me different ideas' : picked.length || macroSummary(macros) ? `Make the best dinner${picked.length ? ` with ${picked.length} pick${picked.length === 1 ? '' : 's'}` : ''}${macroSummary(macros) ? ` · ${macroSummary(macros)}` : ''}` : `Make me dinner · ${dietLabel}`}
+              onPress={() => ask.mutate(undefined)}
             />
             {pantry.length === 0 ? (
               <Txt className="mt-3 text-center text-[13px]" style={{ color: C.inkSoft }}>Your kitchen is empty — FridgeGenie will suggest easy dinners with a short shopping list. Scan a receipt or your fridge for better matches.</Txt>
@@ -278,7 +323,7 @@ export default function GenieChef() {
         {ideasStale && !ask.isPending ? (
           <Animated.View entering={FadeIn} className="mx-5 mt-6 flex-row items-center rounded-2xl p-3" style={{ backgroundColor: C.honey, gap: 10 }} testID="genie-ideas-stale">
             <Txt weight="bold" className="flex-1 text-[14px]" style={{ color: C.onHoney }}>Your kitchen changed since these ideas. Want new ones?</Txt>
-            <PressableScale testID="genie-ideas-refresh" accessibilityRole="button" accessibilityLabel="Get new ideas" onPress={() => ask.mutate()}>
+            <PressableScale testID="genie-ideas-refresh" accessibilityRole="button" accessibilityLabel="Get new ideas" onPress={() => ask.mutate(undefined)}>
               <View className="h-10 flex-row items-center rounded-full px-3.5" style={{ backgroundColor: C.ink, gap: 6 }}>
                 <RefreshCw size={15} color={C.cream} />
                 <Txt weight="extrabold" className="text-[13px]" style={{ color: C.cream }}>New ideas</Txt>
@@ -313,6 +358,7 @@ export default function GenieChef() {
                   ) : (
                     <Txt weight="extrabold" className="mt-1.5 text-[13px]" style={{ color: C.leafDark }}>You have everything ✓</Txt>
                   )}
+                  <MacroRow macros={idea.macros} onHoney={i === 0} />
                   <View className="mt-4 flex-row" style={{ gap: 10 }}>
                     <PressableScale testID={`genie-idea-cook-${i}`} accessibilityRole="button" accessibilityLabel={`Cook ${idea.title}`} style={{ flex: 1.3 }} onPress={() => keep(idea, true)}>
                       <View className="h-12 flex-row items-center justify-center rounded-full" style={{ backgroundColor: C.ink, gap: 7 }}>
