@@ -12,7 +12,7 @@ import { openPaywall, PlusRequiredError } from '@/lib/plus';
 import { toast, useApp } from '@/lib/store';
 import { haptic, signature } from '@/lib/theme';
 import { useTheme } from '@/lib/theme-context';
-import { DIETS, askGenieForRecipes, dishPhoto, ideaToDraft, type GenieIdea } from '@/lib/services/genie-recipes';
+import { DIETS, GENIE_PLACEHOLDER, askGenieForRecipes, dishPhoto, ideaToDraft, type GenieIdea } from '@/lib/services/genie-recipes';
 import type { Diet } from '@/lib/types';
 import { kitchenInsight, pantryHas, matchRecipe } from '@/lib/kitchen';
 import { RecipeImage } from '@/components/recipe-image';
@@ -45,6 +45,8 @@ export default function GenieChef() {
   const [macros, setMacros] = useState<MacroTargets>({});
   const [request, setRequest] = useState<string>('');
   const [ideas, setIdeas] = useState<GenieIdea[]>([]);
+  // Dish photos start drawing as soon as ideas arrive, so a saved recipe already has its real photo.
+  const [photos, setPhotos] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [thinking, setThinking] = useState<number>(0);
   const catalogItems = useCatalog((s) => s.items);
@@ -93,6 +95,7 @@ export default function GenieChef() {
     onSuccess: (list, vars) => {
       haptic.success();
       setIdeas(list);
+      list.forEach((idea) => { void dishPhoto(idea).then((url) => { if (url) setPhotos((p) => ({ ...p, [idea.title]: url })); }); });
       setIdeasFor(pantryKey);
       useApp.getState().setGenieUsed();
       setSaved({});
@@ -145,12 +148,14 @@ export default function GenieChef() {
   const keep = (idea: GenieIdea, andCook: boolean) => {
     let id = saved[idea.title];
     if (!id) {
-      id = saveRecipe(ideaToDraft(idea), false);
+      const ready = photos[idea.title];
+      id = saveRecipe(ideaToDraft(idea, ready), false);
       setSaved((s) => ({ ...s, [idea.title]: id }));
-      // fetch a photo of the finished dish in the background
-      void dishPhoto(idea).then((url) => {
-        if (url) updateRecipe(id, { image: url });
-      });
+      // photo still drawing: fill it in when it's ready (same request, so the server returns the same picture)
+      if (!ready) {
+        const rid = id;
+        void dishPhoto(idea).then((url) => { if (url) updateRecipe(rid, { image: url }); });
+      }
     }
     haptic.success();
     if (andCook) router.push({ pathname: '/recipe/[id]', params: { id } });
@@ -347,7 +352,10 @@ export default function GenieChef() {
                       </View>
                     ))}
                   </View>
-                  <Txt display weight="bold" className="mt-3 text-[24px] leading-[27px]" style={{ color: i === 0 ? C.onHoney : C.ink }}>{idea.title}</Txt>
+                  <View className="mt-3 flex-row items-center" style={{ gap: 12 }}>
+                    <RecipeImage source={{ uri: photos[idea.title] ?? GENIE_PLACEHOLDER }} style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 1.5, borderColor: C.ink }} contentFit="cover" />
+                    <Txt display weight="bold" className="flex-1 text-[24px] leading-[27px]" style={{ color: i === 0 ? C.onHoney : C.ink }}>{idea.title}</Txt>
+                  </View>
                   <Txt weight="semibold" className="mt-1.5 text-[14px] leading-5" style={{ color: i === 0 ? C.onHoney : C.inkSoft }}>{idea.blurb}</Txt>
                   <View className="mt-3 flex-row items-center" style={{ gap: 14 }}>
                     <View className="flex-row items-center" style={{ gap: 5 }}><Clock size={14} color={C.ink} /><Txt weight="bold" className="text-[13px]">{idea.cookTime} min</Txt></View>

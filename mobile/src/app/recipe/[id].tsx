@@ -94,7 +94,7 @@ export default function RecipeDetail() {
           <PressableScale testID="view-original" accessibilityRole="button" accessibilityLabel="View original recipe" disabled={!recipe.source.url} onPress={() => recipe.source.url && WebBrowser.openBrowserAsync(recipe.source.url)} style={{ alignSelf: 'flex-start' }}>
             <View className="flex-row items-center rounded-full bg-white px-3 py-2" style={{ gap: 5 }}>
               <View className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: C.berry }} />
-              <Txt weight="bold" className="text-[12px]" numberOfLines={1}>{PLATFORM_LABEL[recipe.source.platform]}{recipe.source.creator ? ` · ${recipe.source.creator}` : ''}{recipe.source.url ? ' · View original' : ''}</Txt>
+              <Txt weight="bold" className="text-[12px]" numberOfLines={1}>{PLATFORM_LABEL[recipe.source.platform]}{recipe.source.creator && recipe.source.creator !== PLATFORM_LABEL[recipe.source.platform] ? ` · ${recipe.source.creator}` : ''}{recipe.source.url ? ' · View original' : ''}</Txt>
               {recipe.source.url ? <ExternalLink size={11} color={C.ink} /> : null}
             </View>
           </PressableScale>

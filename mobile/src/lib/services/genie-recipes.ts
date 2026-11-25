@@ -70,12 +70,16 @@ export async function askGenieForRecipes(opts: { diets: Diet[]; pantry: PantryIt
   return json.recipes;
 }
 
-export const GENIE_PLACEHOLDER = 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80&auto=format&fit=crop';
+/** Shown while FridgeGenie draws the real dish photo: an empty plate, never a photo of some other dish. */
+export const GENIE_PLACEHOLDER = 'https://rzacuyrcbujcnkpoktyg.supabase.co/storage/v1/object/public/step-images/app/genie-plating-v1.png';
+/** The old stock salad photo older builds used as a stand-in. Treated as "no photo yet". */
+export const LEGACY_PLACEHOLDER = 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80&auto=format&fit=crop';
+export const isPlaceholderPhoto = (url?: string | null) => !url || url === GENIE_PLACEHOLDER || url.includes('photo-1490645935967-10de6ba17061');
 
-export function ideaToDraft(idea: GenieIdea): RecipeDraft {
+export function ideaToDraft(idea: GenieIdea, photo?: string | null): RecipeDraft {
   return {
     title: idea.title,
-    image: GENIE_PLACEHOLDER,
+    image: photo || GENIE_PLACEHOLDER,
     servings: idea.servings,
     cookTime: idea.cookTime,
     ingredients: idea.ingredients.map(({ name, qty, unit }) => ({ name, qty, unit })),

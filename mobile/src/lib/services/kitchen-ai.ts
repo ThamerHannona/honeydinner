@@ -173,7 +173,7 @@ export async function importRecipe(
 
 export const blankDraft = (platform: SourcePlatform = 'web', url: string | null = null): RecipeDraft => ({
   title: '',
-  image: img('photo-1490645935967-10de6ba17061'),
+  image: 'https://rzacuyrcbujcnkpoktyg.supabase.co/storage/v1/object/public/step-images/app/genie-plating-v1.png',
   servings: 2,
   cookTime: 30,
   ingredients: [{ name: '', qty: null, unit: '' }],

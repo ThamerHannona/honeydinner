@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
-import { dishPhoto, GENIE_PLACEHOLDER } from '@/lib/services/genie-recipes';
+import { dishPhoto, GENIE_PLACEHOLDER, isPlaceholderPhoto } from '@/lib/services/genie-recipes';
 import { useApp } from '@/lib/store';
 
 const inFlight = new Set<string>();
@@ -16,7 +16,7 @@ function applyImages(changes: Record<string, string>) {
 
 /** Recipes showing the stock photo get a real photo of that dish (server caches it). All requests run together. */
 async function heal() {
-  const list = useApp.getState().recipes.filter((r) => r.image === GENIE_PLACEHOLDER && !inFlight.has(r.id)).slice(0, 12);
+  const list = useApp.getState().recipes.filter((r) => isPlaceholderPhoto(r.image) && !inFlight.has(r.id)).slice(0, 12);
   if (!list.length) return;
   list.forEach((r) => inFlight.add(r.id));
   const results = await Promise.all(
@@ -35,7 +35,7 @@ async function heal() {
 }
 
 export function useGeniePhotos() {
-  const count = useApp((s) => s.recipes.filter((r) => r.image === GENIE_PLACEHOLDER).length);
+  const count = useApp((s) => s.recipes.filter((r) => isPlaceholderPhoto(r.image)).length);
   useEffect(() => {
     if (!count) return;
     const t = setTimeout(() => void heal(), 1500); // let the app settle first

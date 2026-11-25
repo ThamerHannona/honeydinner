@@ -20,7 +20,7 @@ export interface CatalogItem {
   data: { blurb?: string; servings: number; cookTime: number; cuisine?: string; tags?: string[]; ingredients: Ingredient[]; steps: string[] };
 }
 
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80&auto=format&fit=crop';
+const FALLBACK_IMAGE = 'https://rzacuyrcbujcnkpoktyg.supabase.co/storage/v1/object/public/step-images/app/genie-plating-v1.png';
 const DAY = 3 * 60 * 60 * 1000; // refresh every few hours (new photos and recipes keep arriving)
 const SOON = 5 * 60 * 1000; // …or every 5 minutes while some dish photos are still being made
 
