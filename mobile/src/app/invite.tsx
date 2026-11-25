@@ -131,11 +131,13 @@ export default function Invite() {
                 void leaveKitchen();
                 toast('Left the shared kitchen. Recipes and lists stay on this phone and are no longer synced.');
               }}
-              className="mt-8 flex-row items-center self-center"
-              style={{ gap: 6, minHeight: 44 }}
+              className="mt-8 self-center"
+              style={{ minHeight: 44, justifyContent: 'center' }}
             >
-              <LogOut size={16} color={C.inkSoft} />
-              <Txt weight="bold" className="text-[14px]" style={{ color: C.inkSoft }}>Leave shared kitchen</Txt>
+              <View className="flex-row items-center" style={{ gap: 6 }}>
+                <LogOut size={16} color={C.inkSoft} />
+                <Txt weight="bold" className="text-[14px]" style={{ color: C.inkSoft }}>Leave shared kitchen</Txt>
+              </View>
             </PressableScale>
           </View>
         ) : (

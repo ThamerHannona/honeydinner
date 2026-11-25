@@ -2,7 +2,7 @@ import { useTheme } from '@/lib/theme-context';
 import React from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { ZoomIn, useReducedMotion } from 'react-native-reanimated';
+import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { Clapperboard, Receipt, Refrigerator } from 'lucide-react-native';
 import { SheetHeader } from '@/components/app';
 import { PressableScale, Txt, HardShadow } from '@/components/ui';
@@ -47,7 +47,7 @@ const OPTIONS = [
           const Icon = o.icon;
           const fg = o.key === 'receipt' ? C.onHoney : o.key === 'fridge' ? C.cream : C.onGreen;
           return (
-            <Animated.View key={o.key} style={{ flex: 1 }} entering={reduceMotion ? undefined : ZoomIn.delay(i * 70).springify().damping(12)}>
+            <Animated.View key={o.key} style={{ flex: 1 }} entering={reduceMotion ? undefined : FadeInDown.delay(i * 45).duration(240)}>
               <PressableScale testID={`add-${o.key}`} onPress={o.go} accessibilityRole="button" accessibilityLabel={`${o.title}. ${o.sub}`}>
                 <HardShadow radius={24}>
                   <View className="items-center rounded-[24px] bg-white px-2 pb-4 pt-5" style={{ borderWidth: 1.5, borderColor: C.ink, minHeight: 178 }}>

@@ -11,7 +11,20 @@ const singular = (w: string) =>
         ? w.slice(0, -1)
         : w;
 
-export const normalizeName = (name: string) =>
+/** Small bounded cache: these helpers run hundreds of thousands of times when ranking the cookbook. */
+function memo<T>(fn: (k: string) => T, max = 20000): (k: string) => T {
+  const cache = new Map<string, T>();
+  return (k: string) => {
+    const hit = cache.get(k);
+    if (hit !== undefined) return hit;
+    const v = fn(k);
+    if (cache.size > max) cache.clear();
+    cache.set(k, v);
+    return v;
+  };
+}
+
+export const normalizeName = memo((name: string) =>
   name
     .toLowerCase()
     .replace(/\(.*?\)/g, '')
@@ -20,11 +33,11 @@ export const normalizeName = (name: string) =>
     .filter(Boolean)
     .map(singular)
     .join(' ')
-    .trim();
+    .trim());
 
 /** Things every kitchen has, so they never count as "missing". */
 const BASICS = ['salt', 'pepper', 'black pepper', 'water', 'ice', 'sea salt', 'kosher salt', 'salt and pepper', 'ground black pepper'];
-export const isBasic = (name: string) => BASICS.includes(normalizeName(name));
+export const isBasic = memo((name: string) => BASICS.includes(normalizeName(name)));
 
 /**
  * Staples most kitchens keep stocked (oils, butter, vinegar, flour, sugar,
@@ -42,14 +55,14 @@ const STAPLE_WORDS = [
   'bay leaf', 'curry powder', 'turmeric', 'coriander', 'garam masala', 'dried parsley', 'dried dill', 'vanilla', 'vanilla extract',
 ];
 const STAPLE_SET = new Set(STAPLE_WORDS.map((w) => normalizeName(w)));
-export const isStaple = (name: string) => {
+export const isStaple = memo((name: string): boolean => {
   const core = coreName(name);
   if (STAPLE_SET.has(core)) {
     // fresh herbs are produce, not pantry staples
     return !/\bfresh\b/i.test(name) || /\bdried or fresh\b|\bfresh or dried\b/i.test(name);
   }
   return /\b(dried|ground)\b/i.test(name) && core.split(' ').length <= 2;
-};
+});
 
 /** Descriptor words that don't change which ingredient it is. */
 const DESCRIPTORS = new Set([
@@ -57,10 +70,10 @@ const DESCRIPTORS = new Set([
   'medium', 'whole', 'finely', 'roughly', 'thinly', 'to', 'taste', 'optional', 'for', 'serving', 'garnish', 'extra', 'virgin', 'of',
   'leaf', 'leave', 'sprig', 'clove', 'pinch', 'a', 'the', 'softened', 'melted', 'room', 'temperature', 'boneless', 'skinless', 'peeled',
 ]);
-export function coreName(name: string): string {
+export const coreName = memo((name: string): string => {
   const words = normalizeName(name).split(' ').filter((w) => w && !DESCRIPTORS.has(w));
   return words.join(' ') || normalizeName(name);
-}
+});
 
 /** Merge lines that are the same ingredient ("dried rosemary" + "dried or fresh rosemary"). */
 export function mergeIngredients(list: Ingredient[]): Ingredient[] {
@@ -81,7 +94,17 @@ export function mergeIngredients(list: Ingredient[]): Ingredient[] {
   return out;
 }
 
-export const namesMatch = (a: string, b: string) => {
+const matchCache = new Map<string, boolean>();
+export const namesMatch = (a: string, b: string): boolean => {
+  const key = `${a}\u0000${b}`;
+  const hit = matchCache.get(key);
+  if (hit !== undefined) return hit;
+  const v = namesMatchRaw(a, b);
+  if (matchCache.size > 60000) matchCache.clear();
+  matchCache.set(key, v);
+  return v;
+};
+const namesMatchRaw = (a: string, b: string) => {
   const na = normalizeName(a);
   const nb = normalizeName(b);
   if (!na || !nb) return false;
@@ -141,7 +164,19 @@ export const daysLeft = (iso: string | null) => {
 
 export type Freshness = 'fresh' | 'soon' | 'expired' | 'none';
 
+const freshCache = new Map<string, Freshness>();
+let freshHour = -1;
 export const freshness = (iso: string | null): Freshness => {
+  if (!iso) return 'none';
+  const hour = Math.floor(Date.now() / 3600000);
+  if (hour !== freshHour) { freshCache.clear(); freshHour = hour; }
+  const hit = freshCache.get(iso);
+  if (hit) return hit;
+  const v = freshnessRaw(iso);
+  freshCache.set(iso, v);
+  return v;
+};
+const freshnessRaw = (iso: string | null): Freshness => {
   const d = daysLeft(iso);
   if (d === null) return 'none';
   if (d < 0) return 'expired';
@@ -189,7 +224,17 @@ export const pantryHas = (pantry: PantryItem[], ingredientName: string) =>
   isStaple(ingredientName) ||
   pantry.some((p) => freshness(p.expiresAt) !== 'expired' && namesMatch(p.name, ingredientName));
 
+const matchMemo = new WeakMap<PantryItem[], WeakMap<Recipe, RecipeMatch>>();
 export const matchRecipe = (recipe: Recipe, pantry: PantryItem[]): RecipeMatch => {
+  let byRecipe = matchMemo.get(pantry);
+  if (!byRecipe) { byRecipe = new WeakMap(); matchMemo.set(pantry, byRecipe); }
+  const hit = byRecipe.get(recipe);
+  if (hit) return hit;
+  const m = matchRecipeRaw(recipe, pantry);
+  byRecipe.set(recipe, m);
+  return m;
+};
+const matchRecipeRaw = (recipe: Recipe, pantry: PantryItem[]): RecipeMatch => {
   const counted = recipe.ingredients.filter((i) => !isBasic(i.name) && !isStaple(i.name));
   const missing = counted.filter((i) => !pantryHas(pantry, i.name));
   const soon = pantry.filter((p) => freshness(p.expiresAt) === 'soon');
